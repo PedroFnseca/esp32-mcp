@@ -1,0 +1,9 @@
+.pio/
+.vscode/
+build/
+test/include/
+test/test_runner*
+*.exe
+*.o
+*.a
+*.tmp

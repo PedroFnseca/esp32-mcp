@@ -1,0 +1,81 @@
+name: Automated Tests & Verification
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download ArduinoJson single header
+        run: |
+          python -c "import urllib.request, os; os.makedirs('test/include', exist_ok=True); urllib.request.urlretrieve('https://github.com/bblanchon/ArduinoJson/releases/download/v7.3.0/ArduinoJson-v7.3.0.h', 'test/include/ArduinoJson.h')"
+
+      - name: Compile and Run Unit Tests (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: |
+          g++ -std=c++14 -Isrc -Itest/mock -Itest/include \
+            src/mcp/MCPToolRegistry.cpp \
+            src/mcp/MCPJsonRpc.cpp \
+            src/mcp/MCPServer.cpp \
+            src/mcp/transports/MCPHttpTransport.cpp \
+            test/test_main.cpp \
+            -o test_runner
+          ./test_runner
+
+      - name: Compile and Run Unit Tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          g++ -std=c++14 -Isrc -Itest/mock -Itest/include `
+            src/mcp/MCPToolRegistry.cpp `
+            src/mcp/MCPJsonRpc.cpp `
+            src/mcp/MCPServer.cpp `
+            src/mcp/transports/MCPHttpTransport.cpp `
+            test/test_main.cpp `
+            -o test_runner.exe
+          .\test_runner.exe
+
+  esp32-compile:
+    name: ESP32 Build Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO Core
+        run: |
+          pip install --upgrade platformio
+
+      - name: Build Examples for ESP32
+        run: |
+          pio ci --board=esp32dev --lib="." --lib="bblanchon/ArduinoJson@^7.0.0" examples/01_BasicServer/01_BasicServer.ino
+          pio ci --board=esp32dev --lib="." --lib="bblanchon/ArduinoJson@^7.0.0" examples/02_LedControl/02_LedControl.ino
+          pio ci --board=esp32dev --lib="." --lib="bblanchon/ArduinoJson@^7.0.0" examples/03_SensorReading/03_SensorReading.ino
+          pio ci --board=esp32dev --lib="." --lib="bblanchon/ArduinoJson@^7.0.0" examples/04_StructuredData/04_StructuredData.ino

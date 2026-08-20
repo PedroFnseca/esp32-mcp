@@ -75,7 +75,7 @@ jobs:
 
       - name: Build Examples for ESP32
         run: |
-          pio ci --board=esp32dev --lib="." --lib="bblanchon/ArduinoJson@^7.0.0" examples/01_BasicServer/01_BasicServer.ino
-          pio ci --board=esp32dev --lib="." --lib="bblanchon/ArduinoJson@^7.0.0" examples/02_LedControl/02_LedControl.ino
-          pio ci --board=esp32dev --lib="." --lib="bblanchon/ArduinoJson@^7.0.0" examples/03_SensorReading/03_SensorReading.ino
-          pio ci --board=esp32dev --lib="." --lib="bblanchon/ArduinoJson@^7.0.0" examples/04_StructuredData/04_StructuredData.ino
+          pio ci --board=esp32dev --lib="." --project-option="lib_deps=bblanchon/ArduinoJson@^7.0.0" examples/01_BasicServer/01_BasicServer.ino
+          pio ci --board=esp32dev --lib="." --project-option="lib_deps=bblanchon/ArduinoJson@^7.0.0" examples/02_LedControl/02_LedControl.ino
+          pio ci --board=esp32dev --lib="." --project-option="lib_deps=bblanchon/ArduinoJson@^7.0.0" examples/03_SensorReading/03_SensorReading.ino
+          pio ci --board=esp32dev --lib="." --project-option="lib_deps=bblanchon/ArduinoJson@^7.0.0" examples/04_StructuredData/04_StructuredData.ino

@@ -16,6 +16,8 @@ jobs:
     outputs:
       prs_created: ${{ steps.release.outputs.prs_created }}
       pr: ${{ steps.release.outputs.pr }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -24,6 +26,7 @@ jobs:
           manifest-file: .release-please-manifest.json
 
   sync-properties:
+    name: Sync library.properties in Release PR
     runs-on: ubuntu-latest
     needs: release-please
     if: ${{ needs.release-please.outputs.prs_created == 'true' }}
@@ -54,3 +57,29 @@ jobs:
             git commit -m "chore: sync version in library.properties [skip ci]"
             git push origin HEAD:${{ steps.branch.outputs.head_branch }}
           fi
+
+  publish-platformio:
+    name: Publish to PlatformIO Registry
+    runs-on: ubuntu-latest
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    steps:
+      - name: Checkout released code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO Core
+        run: |
+          pip install --upgrade platformio
+
+      - name: Publish to PlatformIO Registry
+        env:
+          PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
+        run: |
+          pio pkg publish --no-interactive

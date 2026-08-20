@@ -12,6 +12,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  arduino-lint:
+    name: Arduino Lint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Arduino Lint
+        uses: arduino/arduino-lint-action@v1
+        with:
+          library-manager: submit
+          compliance: strict
+
   unit-tests:
     name: Unit Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

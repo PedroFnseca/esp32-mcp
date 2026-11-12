@@ -7,6 +7,8 @@
 #include "../src/mcp/MCPToolRegistry.h"
 #include "../src/mcp/MCPJsonRpc.h"
 #include "../src/mcp/MCPServer.h"
+#include "../src/mcp/json/MCPJsonScanner.h"
+#include "../src/mcp/json/MCPJsonWriter.h"
 
 int tests_passed = 0;
 int tests_failed = 0;
@@ -234,6 +236,128 @@ void test_mcp_arguments_types() {
     TEST_ASSERT(args.getInt("missing_key", 999) == 999, "Default value mismatch");
 }
 
+void test_json_scanner_escapes_and_surrogates() {
+    const char* json = "{\"escapes\":\"quote:\\\" slash:\\/ backslash:\\\\ newline:\\n tab:\\t return:\\r formfeed:\\f backspace:\\b unicode:\\u0041 smiley:\\uD83D\\uDE00\"}";
+    MCPScanError err = MCPScanError::None;
+    bool ok = MCPJsonScanner::validate(json, strlen(json), &err);
+    TEST_ASSERT(ok, "JSON with escapes and surrogate pairs must be valid");
+    TEST_ASSERT(err == MCPScanError::None, "No scan error expected");
+
+    MCPJsonSlice val = MCPJsonScanner::findKey(json, strlen(json), "escapes");
+    TEST_ASSERT(val.isValid(), "Key escapes must be found");
+    TEST_ASSERT(val.isString(), "Value must be string");
+
+    char decoded[256];
+    size_t dLen = 0;
+    TEST_ASSERT(val.decodeString(decoded, sizeof(decoded), &dLen), "Decoding escapes must succeed");
+    TEST_ASSERT(strstr(decoded, "quote:\"") != nullptr, "Escaped quote must be decoded");
+    TEST_ASSERT(strstr(decoded, "slash:/") != nullptr, "Escaped slash must be decoded");
+    TEST_ASSERT(strstr(decoded, "backslash:\\") != nullptr, "Escaped backslash must be decoded");
+    TEST_ASSERT(strstr(decoded, "unicode:A") != nullptr, "Escaped unicode \\u0041 must decode to A");
+    // UTF-8 representation of U+1F600 (smiley) is \xF0\x9F\x98\x80
+    const char smileyUtf8[] = "\xF0\x9F\x98\x80";
+    TEST_ASSERT(strstr(decoded, smileyUtf8) != nullptr, "Surrogate pair must decode to UTF-8 smiley");
+}
+
+void test_json_scanner_truncated_unicode() {
+    const char* json1 = "{\"str\":\"\\u00\"}";
+    MCPScanError err = MCPScanError::None;
+    TEST_ASSERT(!MCPJsonScanner::validate(json1, strlen(json1), &err), "Truncated \\u must fail validation");
+
+    const char* json2 = "{\"str\":\"\\uD83D\"}";
+    TEST_ASSERT(!MCPJsonScanner::validate(json2, strlen(json2), &err), "Unpaired surrogate must fail validation");
+
+    const char* json3 = "{\"str\":\"\\uD83D\\u0041\"}";
+    TEST_ASSERT(!MCPJsonScanner::validate(json3, strlen(json3), &err), "Invalid low surrogate must fail validation");
+}
+
+void test_json_scanner_integer_overflow() {
+    const char* json = "{\"val\":999999999999999999999999999999}";
+    MCPScanError err = MCPScanError::None;
+    bool ok = MCPJsonScanner::validate(json, strlen(json), &err);
+    TEST_ASSERT(!ok, "Integer overflowing long must fail validation");
+    TEST_ASSERT(err == MCPScanError::IntegerOverflow, "Error must be IntegerOverflow");
+}
+
+void test_json_scanner_depth_limit() {
+    const char* jsonDeep = "[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]";
+    MCPScanError err = MCPScanError::None;
+    bool ok = MCPJsonScanner::validate(jsonDeep, strlen(jsonDeep), &err, 5);
+    TEST_ASSERT(!ok, "Nesting deeper than maxDepth must fail");
+    TEST_ASSERT(err == MCPScanError::DepthExceeded, "Error must be DepthExceeded");
+}
+
+void test_json_scanner_duplicate_keys() {
+    const char* json = "{\"key\":1, \"key\":2}";
+    MCPScanError err = MCPScanError::None;
+    bool ok = MCPJsonScanner::validate(json, strlen(json), &err);
+    TEST_ASSERT(!ok, "Duplicate keys must fail validation");
+    TEST_ASSERT(err == MCPScanError::DuplicateKey, "Error must be DuplicateKey");
+}
+
+void test_json_scanner_truncated_json() {
+    const char* json1 = "{\"key\":\"value";
+    MCPScanError err = MCPScanError::None;
+    TEST_ASSERT(!MCPJsonScanner::validate(json1, strlen(json1), &err), "Unclosed string must fail");
+
+    const char* json2 = "{\"key\":";
+    TEST_ASSERT(!MCPJsonScanner::validate(json2, strlen(json2), &err), "Missing value must fail");
+
+    const char* json3 = "[1, 2,";
+    TEST_ASSERT(!MCPJsonScanner::validate(json3, strlen(json3), &err), "Unclosed array must fail");
+}
+
+void test_json_scanner_trailing_trash() {
+    const char* json = "{\"a\":1} trailing";
+    MCPScanError err = MCPScanError::None;
+    bool ok = MCPJsonScanner::validate(json, strlen(json), &err);
+    TEST_ASSERT(!ok, "Trailing non-whitespace must fail");
+    TEST_ASSERT(err == MCPScanError::TrailingTrash, "Error must be TrailingTrash");
+}
+
+void test_json_scanner_buffer_overflow() {
+    char bigBuffer[MCP_MAX_REQUEST_SIZE + 10];
+    memset(bigBuffer, ' ', sizeof(bigBuffer));
+    bigBuffer[0] = '{';
+    bigBuffer[1] = '}';
+    MCPScanError err = MCPScanError::None;
+    bool ok = MCPJsonScanner::validate(bigBuffer, sizeof(bigBuffer), &err);
+    TEST_ASSERT(!ok, "Payload exceeding MCP_MAX_REQUEST_SIZE must fail");
+    TEST_ASSERT(err == MCPScanError::BufferOverflow, "Error must be BufferOverflow");
+}
+
+void test_json_writer_escapes_and_controls() {
+    char buf[256];
+    MCPJsonWriter writer(buf, sizeof(buf));
+    writer.startObject();
+    // Test string containing quote, backslash, slash, and control chars (\n, \r, \t, 0x01)
+    const char rawInput[] = "quote:\" backslash:\\ slash:/ newline:\n byte1:\x01";
+    writer.addString("data", rawInput);
+    writer.endObject();
+
+    TEST_ASSERT(!writer.isOverflow(), "Writer must not overflow");
+    const char* out = writer.c_str();
+
+    TEST_ASSERT(strstr(out, "\\\"") != nullptr, "Quote must be escaped as \\\"");
+    TEST_ASSERT(strstr(out, "\\\\") != nullptr, "Backslash must be escaped as \\\\");
+    TEST_ASSERT(strstr(out, "\\/") != nullptr, "Slash must be escaped as \\/");
+    TEST_ASSERT(strstr(out, "\\n") != nullptr, "Newline must be escaped as \\n");
+    TEST_ASSERT(strstr(out, "\\u0001") != nullptr, "Control char < 0x20 must be escaped as \\u0001");
+}
+
+void test_json_writer_overflow() {
+    char smallBuf[20];
+    MCPJsonWriter writer(smallBuf, sizeof(smallBuf));
+    writer.startObject();
+    bool r1 = writer.addString("long_key_name", "this value is definitely too long to fit in 20 bytes");
+    writer.endObject();
+
+    TEST_ASSERT(!r1 || writer.isOverflow(), "Write must indicate failure or overflow");
+    TEST_ASSERT(writer.isOverflow(), "isOverflow must return true");
+    TEST_ASSERT(writer.hasError(), "hasError must return true");
+    TEST_ASSERT(strlen(writer.c_str()) < sizeof(smallBuf), "Must remain null-terminated within buffer");
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << " Running ESP32-MCP Unit Test Suite      " << std::endl;
@@ -253,6 +377,17 @@ int main() {
     RUN_TEST(test_tools_call_unknown_tool);
     RUN_TEST(test_tools_overwrite_registration);
     RUN_TEST(test_mcp_arguments_types);
+
+    RUN_TEST(test_json_scanner_escapes_and_surrogates);
+    RUN_TEST(test_json_scanner_truncated_unicode);
+    RUN_TEST(test_json_scanner_integer_overflow);
+    RUN_TEST(test_json_scanner_depth_limit);
+    RUN_TEST(test_json_scanner_duplicate_keys);
+    RUN_TEST(test_json_scanner_truncated_json);
+    RUN_TEST(test_json_scanner_trailing_trash);
+    RUN_TEST(test_json_scanner_buffer_overflow);
+    RUN_TEST(test_json_writer_escapes_and_controls);
+    RUN_TEST(test_json_writer_overflow);
 
     std::cout << "========================================" << std::endl;
     std::cout << " Test Summary: " << tests_passed << " passed, " << tests_failed << " failed" << std::endl;

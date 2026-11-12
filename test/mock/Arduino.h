@@ -133,4 +133,15 @@ inline void digitalWrite(uint8_t pin, uint8_t val) {}
 inline int digitalRead(uint8_t pin) { return LOW; }
 inline int analogRead(uint8_t pin) { return 512; }
 
+class MockESP {
+public:
+    uint32_t getFreeHeap() const { return 295000; }
+    uint32_t getMinFreeHeap() const { return 290000; }
+    uint32_t getHeapSize() const { return 320000; }
+    const char* getChipModel() const { return "ESP32-D0WDQ6"; }
+    uint8_t getChipRevision() const { return 1; }
+    uint32_t getCpuFreqMHz() const { return 240; }
+};
+static MockESP ESP;
+
 #endif

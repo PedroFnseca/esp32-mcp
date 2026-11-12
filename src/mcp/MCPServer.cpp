@@ -4,10 +4,18 @@
 #include <string.h>
 #include <stdio.h>
 
-MCPServer::MCPServer(const String& name, const String& version)
-    : _name(name), _version(version), _protocolVersion("2026-07-28"), _instructions(""), _transport(nullptr), _ownsTransport(false) {
+MCPServer::MCPServer(const char* name, const char* version)
+    : _transport(nullptr), _ownsTransport(false) {
+    setName(name ? name : "ESP32-MCP");
+    setVersion(version ? version : "0.0.1");
+    setProtocolVersion("2026-07-28");
+    _instructions[0] = '\0';
     _requestBuffer[0] = '\0';
     _responseBuffer[0] = '\0';
+}
+
+MCPServer::MCPServer(const String& name, const String& version)
+    : MCPServer(name.c_str(), version.c_str()) {
 }
 
 MCPServer::~MCPServer() {
@@ -17,36 +25,64 @@ MCPServer::~MCPServer() {
     }
 }
 
-void MCPServer::setName(const String& name) {
-    _name = name;
+void MCPServer::setName(const char* name) {
+    strncpy(_name, name ? name : "", sizeof(_name) - 1);
+    _name[sizeof(_name) - 1] = '\0';
 }
 
-const String& MCPServer::getName() const {
+void MCPServer::setName(const String& name) {
+    setName(name.c_str());
+}
+
+const char* MCPServer::getName() const {
     return _name;
 }
 
-void MCPServer::setVersion(const String& version) {
-    _version = version;
+void MCPServer::setVersion(const char* version) {
+    strncpy(_version, version ? version : "", sizeof(_version) - 1);
+    _version[sizeof(_version) - 1] = '\0';
 }
 
-const String& MCPServer::getVersion() const {
+void MCPServer::setVersion(const String& version) {
+    setVersion(version.c_str());
+}
+
+const char* MCPServer::getVersion() const {
     return _version;
 }
 
-void MCPServer::setProtocolVersion(const String& protocolVersion) {
-    _protocolVersion = protocolVersion;
+void MCPServer::setProtocolVersion(const char* protocolVersion) {
+    strncpy(_protocolVersion, protocolVersion ? protocolVersion : "", sizeof(_protocolVersion) - 1);
+    _protocolVersion[sizeof(_protocolVersion) - 1] = '\0';
 }
 
-const String& MCPServer::getProtocolVersion() const {
+void MCPServer::setProtocolVersion(const String& protocolVersion) {
+    setProtocolVersion(protocolVersion.c_str());
+}
+
+const char* MCPServer::getProtocolVersion() const {
     return _protocolVersion;
 }
 
-void MCPServer::setInstructions(const String& instructions) {
-    _instructions = instructions;
+void MCPServer::setInstructions(const char* instructions) {
+    strncpy(_instructions, instructions ? instructions : "", sizeof(_instructions) - 1);
+    _instructions[sizeof(_instructions) - 1] = '\0';
 }
 
-const String& MCPServer::getInstructions() const {
+void MCPServer::setInstructions(const String& instructions) {
+    setInstructions(instructions.c_str());
+}
+
+const char* MCPServer::getInstructions() const {
     return _instructions;
+}
+
+bool MCPServer::tool(const char* name, const char* description, MCPToolHandler handler) {
+    return _toolRegistry.registerTool(name, description, handler);
+}
+
+bool MCPServer::tool(const char* name, const char* description, const char* schemaJson, MCPToolHandler handler) {
+    return _toolRegistry.registerTool(name, description, schemaJson, handler);
 }
 
 bool MCPServer::tool(const String& name, const String& description, MCPToolHandler handler) {
@@ -118,7 +154,7 @@ bool MCPServer::handleServerDiscover(const MCPRpcRequestView& req, MCPJsonWriter
 
     writer.writeKey("supportedVersions");
     writer.startArray();
-    writer.writeString(_protocolVersion.c_str());
+    writer.writeString(_protocolVersion);
     writer.endArray();
 
     writer.writeKey("capabilities");
@@ -129,23 +165,23 @@ bool MCPServer::handleServerDiscover(const MCPRpcRequestView& req, MCPJsonWriter
     writer.endObject();
     writer.endObject();
 
-    if (_instructions.length() > 0) {
-        writer.addString("instructions", _instructions.c_str());
+    if (_instructions[0] != '\0') {
+        writer.addString("instructions", _instructions);
     }
 
     writer.writeKey("_meta");
     writer.startObject();
     writer.writeKey("io.modelcontextprotocol/serverInfo");
     writer.startObject();
-    writer.addString("name", _name.c_str());
-    writer.addString("version", _version.c_str());
+    writer.addString("name", _name);
+    writer.addString("version", _version);
     writer.endObject();
     writer.endObject();
 
     writer.writeKey("serverInfo");
     writer.startObject();
-    writer.addString("name", _name.c_str());
-    writer.addString("version", _version.c_str());
+    writer.addString("name", _name);
+    writer.addString("version", _version);
     writer.endObject();
 
     writer.endObject();
@@ -164,7 +200,7 @@ bool MCPServer::handleInitialize(const MCPRpcRequestView& req, MCPJsonWriter& wr
     writer.writeKey("result");
     writer.startObject();
 
-    writer.addString("protocolVersion", _protocolVersion.c_str());
+    writer.addString("protocolVersion", _protocolVersion);
 
     writer.writeKey("capabilities");
     writer.startObject();
@@ -176,12 +212,12 @@ bool MCPServer::handleInitialize(const MCPRpcRequestView& req, MCPJsonWriter& wr
 
     writer.writeKey("serverInfo");
     writer.startObject();
-    writer.addString("name", _name.c_str());
-    writer.addString("version", _version.c_str());
+    writer.addString("name", _name);
+    writer.addString("version", _version);
     writer.endObject();
 
-    if (_instructions.length() > 0) {
-        writer.addString("instructions", _instructions.c_str());
+    if (_instructions[0] != '\0') {
+        writer.addString("instructions", _instructions);
     }
 
     writer.endObject();
@@ -221,10 +257,10 @@ bool MCPServer::handleToolsList(const MCPRpcRequestView& req, MCPJsonWriter& wri
         const MCPTool* t = _toolRegistry.getTool(i);
         if (!t) continue;
         writer.startObject();
-        writer.addString("name", t->name.c_str());
-        writer.addString("description", t->description.c_str());
-        if (t->inputSchemaJson.length() > 0) {
-            writer.addRaw("inputSchema", t->inputSchemaJson.c_str(), t->inputSchemaJson.length());
+        writer.addString("name", t->name);
+        writer.addString("description", t->description);
+        if (t->inputSchemaJson && t->inputSchemaJson[0] != '\0') {
+            writer.addRaw("inputSchema", t->inputSchemaJson, strlen(t->inputSchemaJson));
         } else {
             writer.addRaw("inputSchema", "{\"type\":\"object\",\"properties\":{}}", 31);
         }
@@ -273,14 +309,14 @@ bool MCPServer::handleToolsCall(const MCPRpcRequestView& req, MCPJsonWriter& wri
     writer.writeKey("content");
     writer.startArray();
     writer.startObject();
-    writer.addString("type", res.contentType.length() > 0 ? res.contentType.c_str() : "text");
-    writer.addString("text", res.content.c_str());
+    writer.addString("type", res.contentType()[0] != '\0' ? res.contentType() : "text");
+    writer.addString("text", res.content());
     writer.endObject();
     writer.endArray();
 
     writer.addBool("isError", res.isError);
-    if (res.isError && res.errorCode.length() > 0) {
-        writer.addString("errorCode", res.errorCode.c_str());
+    if (res.isError && res.errorCode()[0] != '\0') {
+        writer.addString("errorCode", res.errorCode());
     }
 
     writer.endObject();

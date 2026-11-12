@@ -12,10 +12,10 @@
 
 class MCPServer {
 private:
-    String _name;
-    String _version;
-    String _protocolVersion;
-    String _instructions;
+    char _name[32];
+    char _version[16];
+    char _protocolVersion[16];
+    char _instructions[128];
     MCPToolRegistry _toolRegistry;
     MCPTransport* _transport;
     bool _ownsTransport;
@@ -24,21 +24,28 @@ private:
     char _responseBuffer[MCP_MAX_RESPONSE_SIZE];
 
 public:
-    MCPServer(const String& name = "ESP32-MCP", const String& version = "0.0.1");
+    MCPServer(const char* name = "ESP32-MCP", const char* version = "0.0.1");
+    MCPServer(const String& name, const String& version = "0.0.1");
     ~MCPServer();
 
+    void setName(const char* name);
     void setName(const String& name);
-    const String& getName() const;
+    const char* getName() const;
 
+    void setVersion(const char* version);
     void setVersion(const String& version);
-    const String& getVersion() const;
+    const char* getVersion() const;
 
+    void setProtocolVersion(const char* protocolVersion);
     void setProtocolVersion(const String& protocolVersion);
-    const String& getProtocolVersion() const;
+    const char* getProtocolVersion() const;
 
+    void setInstructions(const char* instructions);
     void setInstructions(const String& instructions);
-    const String& getInstructions() const;
+    const char* getInstructions() const;
 
+    bool tool(const char* name, const char* description, MCPToolHandler handler);
+    bool tool(const char* name, const char* description, const char* schemaJson, MCPToolHandler handler);
     bool tool(const String& name, const String& description, MCPToolHandler handler);
     bool tool(const String& name, const String& description, const String& schemaJson, MCPToolHandler handler);
     bool tool(const MCPTool& toolObj);

@@ -106,14 +106,14 @@ void test_mcp_notification_no_response() {
 void test_tools_list() {
     MCPServer server;
     server.tool("get_temp", "Reads temperature", [](const MCPArguments& args) {
-        return MCPResult::text("25.5 C");
+        return MCPResult::makeText("25.5 C");
     });
     server.tool(
         "set_led",
         "Control LED",
         "{\"type\":\"object\",\"properties\":{\"state\":{\"type\":\"boolean\"}},\"required\":[\"state\"]}",
         [](const MCPArguments& args) {
-            return MCPResult::text("OK");
+            return MCPResult::makeText("OK");
         }
     );
 
@@ -132,7 +132,7 @@ void test_tools_call_success() {
         int a = args.getInt("a");
         int b = args.getInt("b");
         int sum = a + b;
-        return MCPResult::text(String(sum));
+        return MCPResult::makeText("%d", sum);
     });
 
     String req = "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"add_numbers\",\"arguments\":{\"a\":15,\"b\":27}}}";
@@ -147,7 +147,7 @@ void test_tools_call_success() {
 void test_tools_call_error_handling() {
     MCPServer server;
     server.tool("failing_tool", "Tool that fails", [](const MCPArguments& args) {
-        return MCPResult::error("DEVICE_BUSY", "Sensor currently busy");
+        return MCPResult::makeError("DEVICE_BUSY", "Sensor currently busy");
     });
 
     String req = "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"failing_tool\",\"arguments\":{}}}";
@@ -171,16 +171,16 @@ void test_tools_call_unknown_tool() {
 void test_tools_overwrite_registration() {
     MCPServer server;
     server.tool("sensor", "V1 description", [](const MCPArguments& args) {
-        return MCPResult::text("V1");
+        return MCPResult::makeText("V1");
     });
     server.tool("sensor", "V2 description", [](const MCPArguments& args) {
-        return MCPResult::text("V2");
+        return MCPResult::makeText("V2");
     });
 
     TEST_ASSERT(server.getToolRegistry().count() == 1, "Must have only 1 tool after overwrite");
     const MCPTool* t = server.getToolRegistry().findTool("sensor");
     TEST_ASSERT(t != nullptr, "Tool must exist");
-    TEST_ASSERT(t->description == "V2 description", "Description must be updated");
+    TEST_ASSERT(strcmp(t->description, "V2 description") == 0, "Description must be updated");
 
     String req = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sensor\",\"arguments\":{}}}";
     String response = server.processMessage(req);
@@ -329,15 +329,15 @@ void test_json_writer_overflow() {
 void test_tool_schema_validation_and_max_tools() {
     MCPServer server;
     // Malformed JSON schema
-    bool okMalformed = server.tool("bad1", "desc", "{malformed:", [](const MCPArguments&) { return MCPResult::text("ok"); });
+    bool okMalformed = server.tool("bad1", "desc", "{malformed:", [](const MCPArguments&) { return MCPResult::makeText("ok"); });
     TEST_ASSERT(!okMalformed, "Malformed schema must be rejected");
 
     // Valid JSON but not an object
-    bool okNonObject = server.tool("bad2", "desc", "[1, 2, 3]", [](const MCPArguments&) { return MCPResult::text("ok"); });
+    bool okNonObject = server.tool("bad2", "desc", "[1, 2, 3]", [](const MCPArguments&) { return MCPResult::makeText("ok"); });
     TEST_ASSERT(!okNonObject, "Non-object schema must be rejected");
 
     // Valid object schema
-    bool okGood = server.tool("good", "desc", "{\"type\":\"object\"}", [](const MCPArguments&) { return MCPResult::text("ok"); });
+    bool okGood = server.tool("good", "desc", "{\"type\":\"object\"}", [](const MCPArguments&) { return MCPResult::makeText("ok"); });
     TEST_ASSERT(okGood, "Valid object schema must be accepted");
 
     // Fill up to MCP_MAX_TOOLS
@@ -345,11 +345,11 @@ void test_tool_schema_validation_and_max_tools() {
     for (int i = 0; i < MCP_MAX_TOOLS; ++i) {
         char name[16];
         snprintf(name, sizeof(name), "t_%d", i);
-        bool regOk = server.tool(name, "desc", [](const MCPArguments&) { return MCPResult::text("ok"); });
+        bool regOk = server.tool(name, "desc", [](const MCPArguments&) { return MCPResult::makeText("ok"); });
         TEST_ASSERT(regOk, "Registering within MCP_MAX_TOOLS limit must succeed");
     }
     // Next tool registration must fail
-    bool overflowOk = server.tool("t_overflow", "desc", [](const MCPArguments&) { return MCPResult::text("ok"); });
+    bool overflowOk = server.tool("t_overflow", "desc", [](const MCPArguments&) { return MCPResult::makeText("ok"); });
     TEST_ASSERT(!overflowOk, "Registering beyond MCP_MAX_TOOLS must return false");
 }
 
@@ -378,11 +378,10 @@ void test_arguments_get_raw() {
 void test_response_buffer_overflow_error() {
     MCPServer server;
     server.tool("huge_tool", "Generates huge output", [](const MCPArguments&) {
-        // Return a response that exceeds MCP_MAX_RESPONSE_SIZE
-        char huge[MCP_MAX_RESPONSE_SIZE + 500];
+        static char huge[MCP_MAX_RESPONSE_SIZE + 500];
         memset(huge, 'A', sizeof(huge) - 1);
         huge[sizeof(huge) - 1] = '\0';
-        return MCPResult::text(huge);
+        return MCPResult::makeText(huge);
     });
 
     String req = "{\"jsonrpc\":\"2.0\",\"id\":\"overflow-test\",\"method\":\"tools/call\",\"params\":{\"name\":\"huge_tool\",\"arguments\":{}}}";

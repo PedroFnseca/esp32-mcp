@@ -14,9 +14,9 @@ bool MCPToolRegistry::registerTool(const MCPTool& tool) {
         return false;
     }
 
-    if (tool.inputSchemaJson.length() > 0) {
-        const char* s = tool.inputSchemaJson.c_str();
-        size_t len = tool.inputSchemaJson.length();
+    if (tool.inputSchemaJson && tool.inputSchemaJson[0] != '\0') {
+        const char* s = tool.inputSchemaJson;
+        size_t len = strlen(s);
         MCPScanError err = MCPScanError::None;
         if (!MCPJsonScanner::validate(s, len, &err)) {
             return false;
@@ -28,7 +28,7 @@ bool MCPToolRegistry::registerTool(const MCPTool& tool) {
     }
 
     for (size_t i = 0; i < _count; ++i) {
-        if (_tools[i].name == tool.name) {
+        if (strcmp(_tools[i].name, tool.name) == 0) {
             _tools[i] = tool;
             return true;
         }
@@ -42,18 +42,26 @@ bool MCPToolRegistry::registerTool(const MCPTool& tool) {
     return true;
 }
 
-bool MCPToolRegistry::registerTool(const String& name, const String& description, MCPToolHandler handler) {
+bool MCPToolRegistry::registerTool(const char* name, const char* description, MCPToolHandler handler) {
     return registerTool(MCPTool(name, description, handler));
 }
 
-bool MCPToolRegistry::registerTool(const String& name, const String& description, const String& schemaJson, MCPToolHandler handler) {
+bool MCPToolRegistry::registerTool(const char* name, const char* description, const char* schemaJson, MCPToolHandler handler) {
     return registerTool(MCPTool(name, description, schemaJson, handler));
+}
+
+bool MCPToolRegistry::registerTool(const String& name, const String& description, MCPToolHandler handler) {
+    return registerTool(name.c_str(), description.c_str(), handler);
+}
+
+bool MCPToolRegistry::registerTool(const String& name, const String& description, const String& schemaJson, MCPToolHandler handler) {
+    return registerTool(name.c_str(), description.c_str(), schemaJson.c_str(), handler);
 }
 
 const MCPTool* MCPToolRegistry::findTool(const char* name) const {
     if (!name) return nullptr;
     for (size_t i = 0; i < _count; ++i) {
-        if (_tools[i].name == name) {
+        if (strcmp(_tools[i].name, name) == 0) {
             return &_tools[i];
         }
     }

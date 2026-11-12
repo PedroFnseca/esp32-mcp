@@ -15,6 +15,8 @@ public:
     ~MCPToolRegistry();
 
     bool registerTool(const MCPTool& tool);
+    bool registerTool(const char* name, const char* description, MCPToolHandler handler);
+    bool registerTool(const char* name, const char* description, const char* schemaJson, MCPToolHandler handler);
     bool registerTool(const String& name, const String& description, MCPToolHandler handler);
     bool registerTool(const String& name, const String& description, const String& schemaJson, MCPToolHandler handler);
 

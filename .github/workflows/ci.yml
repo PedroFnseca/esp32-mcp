@@ -92,3 +92,4 @@ jobs:
           pio ci --board=esp32dev --lib="." examples/02_LedControl/02_LedControl.ino
           pio ci --board=esp32dev --lib="." examples/03_SensorReading/03_SensorReading.ino
           pio ci --board=esp32dev --lib="." examples/04_StructuredData/04_StructuredData.ino
+          pio ci --board=esp32dev --lib="." examples/05_PerformanceTest/05_PerformanceTest.ino

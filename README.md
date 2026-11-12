@@ -16,7 +16,7 @@ It allows AI assistants (such as Claude Desktop, Gemini, Cursor, and autonomous 
 
 - **Standard MCP 2026-07-28 Protocol**: Full support for the stateless protocol specification including `server/discover`, `initialize`, `ping`, `notifications/initialized`, `tools/list`, and `tools/call`.
 - **JSON-RPC 2.0 Compliance**: Proper handling of IDs, request verification, method routing, and standard JSON-RPC error codes.
-- **Embedded-First Design**: Optimized for ESP32 memory constraints using [ArduinoJson v7](https://arduinojson.org/) with minimal allocations.
+- **Embedded-First Design**: Zero third-party dependencies, DOM-less streaming JSON scanner and fixed-buffer response writer.
 - **Clean & Intuitive API**: Simple lambda-based tool registration with optional JSON Schema parameter definitions.
 - **Decoupled Architecture**: Protocol engine is fully separated from network transports.
 - **Built-in HTTP Transport**: Ready-to-use HTTP server with CORS support.
@@ -63,7 +63,7 @@ ESP32-MCP Architecture
 ## Installation
 
 ### PlatformIO
-Add `ESP32-MCP` and `ArduinoJson` to your `platformio.ini`:
+Add `ESP32-MCP` to your `platformio.ini`:
 
 ```ini
 [env:esp32dev]
@@ -72,14 +72,13 @@ board = esp32dev
 framework = arduino
 monitor_speed = 115200
 lib_deps =
-    bblanchon/ArduinoJson @ ^7.0.0
     https://github.com/PedroFnseca/esp32-mcp.git
 ```
 
 ### Arduino IDE
 1. Download this repository as a `.zip` archive.
 2. In Arduino IDE, navigate to **Sketch** -> **Include Library** -> **Add .ZIP Library...**
-3. Install **ArduinoJson** (version 7.x or newer) via the **Library Manager** (`Ctrl+Shift+I`).
+3. No third-party dependencies required.
 
 ---
 
@@ -241,7 +240,7 @@ curl -X POST http://<ESP32_IP>/mcp \
 The library includes automated unit tests that validate JSON-RPC formatting, error handling, argument extraction, tool registration, and protocol handshakes on host machines without requiring physical hardware:
 
 ```bash
-g++ -std=c++14 -Isrc -Itest/mock -Itest/include src/mcp/MCPToolRegistry.cpp src/mcp/MCPJsonRpc.cpp src/mcp/MCPServer.cpp src/mcp/transports/MCPHttpTransport.cpp test/test_main.cpp -o test/test_runner
+g++ -std=c++14 -Isrc -Itest/mock src/mcp/json/MCPJsonScanner.cpp src/mcp/json/MCPJsonWriter.cpp src/mcp/MCPToolRegistry.cpp src/mcp/MCPJsonRpc.cpp src/mcp/MCPServer.cpp src/mcp/transports/MCPHttpTransport.cpp test/test_main.cpp -o test/test_runner
 ./test/test_runner
 ```
 

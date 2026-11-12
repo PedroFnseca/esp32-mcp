@@ -1,7 +1,6 @@
 #include <iostream>
 #include <cassert>
 #include "Arduino.h"
-#include "ArduinoJson.h"
 #include "../src/mcp/MCPTypes.h"
 #include "../src/mcp/MCPTool.h"
 #include "../src/mcp/MCPToolRegistry.h"

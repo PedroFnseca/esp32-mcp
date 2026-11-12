@@ -22,21 +22,21 @@ void setup() {
         "get_system_telemetry",
         "Returns comprehensive JSON telemetry report of ESP32 system state",
         [](const MCPArguments& args) {
-            JsonDocument doc;
-            doc["chip_model"] = ESP.getChipModel();
-            doc["chip_revision"] = ESP.getChipRevision();
-            doc["cpu_freq_mhz"] = ESP.getCpuFreqMHz();
-            doc["free_heap"] = ESP.getFreeHeap();
-            doc["min_free_heap"] = ESP.getMinFreeHeap();
-            doc["heap_size"] = ESP.getHeapSize();
-            doc["uptime_ms"] = millis();
-            doc["wifi_rssi"] = WiFi.RSSI();
-            doc["ip_address"] = WiFi.localIP().toString();
+            char buf[512];
+            MCPJsonWriter writer(buf, sizeof(buf));
+            writer.startObject();
+            writer.addString("chip_model", ESP.getChipModel());
+            writer.addLong("chip_revision", (long)ESP.getChipRevision());
+            writer.addLong("cpu_freq_mhz", (long)ESP.getCpuFreqMHz());
+            writer.addLong("free_heap", (long)ESP.getFreeHeap());
+            writer.addLong("min_free_heap", (long)ESP.getMinFreeHeap());
+            writer.addLong("heap_size", (long)ESP.getHeapSize());
+            writer.addLong("uptime_ms", (long)millis());
+            writer.addLong("wifi_rssi", (long)WiFi.RSSI());
+            writer.addString("ip_address", WiFi.localIP().toString().c_str());
+            writer.endObject();
 
-            String jsonOutput;
-            serializeJson(doc, jsonOutput);
-
-            return MCPResult::json(jsonOutput);
+            return MCPResult::json(writer.c_str());
         }
     );
 

@@ -61,7 +61,7 @@ BREAKING CHANGE: MCPArguments now requires getInt() instead of getInteger().
 ### Clean Code Constraints
 1. **No Code Comments in `src/`**: Source code in `src/` must remain clean, expressive, and self-documenting without inline or block explanatory comments.
 2. **English Documentation**: All documentation, error messages, test names, and commit messages must be written in English.
-3. **RAM & Embedded Constraints**: Avoid unnecessary heap allocations, large static JSON buffers, and duplicate string copies. Prefer references (`const MCPArguments&`) and ArduinoJson v7 idioms.
+3. **RAM & Embedded Constraints**: Avoid unnecessary heap allocations, large static JSON buffers, and duplicate string copies. Prefer references and fixed-buffer idioms without external libraries.
 
 ---
 

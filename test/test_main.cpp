@@ -501,6 +501,39 @@ void test_security_bearer_and_cors() {
     TEST_ASSERT(server.checkOrigin("https://trusted.ai"), "Configured allowed origin must be accepted");
 }
 
+void test_builtin_status_and_gpio() {
+    MCPServer server;
+    server.enableStatus();
+    server.enableGpio({2, 4});
+
+    // 1. get_status
+    std::string reqStatus = "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"get_status\",\"arguments\":{}}}";
+    std::string resStatus = server.processMessage(reqStatus);
+    TEST_ASSERT(resStatus.find("free_heap") != std::string::npos, "Status must contain free_heap");
+    TEST_ASSERT(resStatus.find("chip_model") != std::string::npos, "Status must contain chip_model");
+
+    // 2. read_pin allowed
+    std::string reqReadOk = "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"read_pin\",\"arguments\":{\"pin\":2}}}";
+    std::string resReadOk = server.processMessage(reqReadOk);
+    TEST_ASSERT(resReadOk.find("\"isError\":false") != std::string::npos || resReadOk.find("\"isError\"") == std::string::npos, "Read allowed pin must succeed");
+
+    // 3. read_pin forbidden
+    std::string reqReadFail = "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tools/call\",\"params\":{\"name\":\"read_pin\",\"arguments\":{\"pin\":13}}}";
+    std::string resReadFail = server.processMessage(reqReadFail);
+    TEST_ASSERT(resReadFail.find("Pin not allowed") != std::string::npos, "Read disallowed pin must fail");
+    TEST_ASSERT(resReadFail.find("\"isError\":true") != std::string::npos, "Read disallowed pin must be marked isError");
+
+    // 4. write_pin allowed
+    std::string reqWriteOk = "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tools/call\",\"params\":{\"name\":\"write_pin\",\"arguments\":{\"pin\":4,\"value\":1}}}";
+    std::string resWriteOk = server.processMessage(reqWriteOk);
+    TEST_ASSERT(resWriteOk.find("Pin 4 set to 1") != std::string::npos, "Write allowed pin must succeed");
+
+    // 5. write_pin out of range value
+    std::string reqWriteRange = "{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"tools/call\",\"params\":{\"name\":\"write_pin\",\"arguments\":{\"pin\":4,\"value\":5}}}";
+    std::string resWriteRange = server.processMessage(reqWriteRange);
+    TEST_ASSERT(resWriteRange.find("-32602") != std::string::npos, "Write out-of-range value must return -32602");
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << " Running ESP32-MCP Unit Test Suite      " << std::endl;
@@ -539,6 +572,7 @@ int main() {
     RUN_TEST(test_fluent_tool_builder_and_validation);
     RUN_TEST(test_step4_protocol_and_headers);
     RUN_TEST(test_security_bearer_and_cors);
+    RUN_TEST(test_builtin_status_and_gpio);
 
     std::cout << "========================================" << std::endl;
     std::cout << " Test Summary: " << tests_passed << " passed, " << tests_failed << " failed" << std::endl;

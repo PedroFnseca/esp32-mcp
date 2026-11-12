@@ -30,6 +30,12 @@ private:
     bool _authWarned;
     bool _useBackgroundTask;
 
+    int _allowedPins[16];
+    size_t _allowedPinCount;
+    int _gpioReadPin;
+    int _gpioWritePin;
+    int _gpioWriteVal;
+
 public:
     MCPServer(const char* name = "ESP32-MCP", const char* version = "0.0.1");
     MCPServer(const String& name, const String& version = "0.0.1");
@@ -69,6 +75,10 @@ public:
     void setInstructions(const char* instructions);
     void setInstructions(const String& instructions);
     const char* getInstructions() const;
+
+    void enableStatus();
+    void enableGpio(std::initializer_list<int> allowedPins);
+    bool isPinAllowed(int pin) const;
 
     MCPToolBuilder tool(const char* name, const char* description);
     MCPToolBuilder tool(const String& name, const String& description);

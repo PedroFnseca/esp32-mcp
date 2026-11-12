@@ -20,28 +20,27 @@ void setup() {
 
     server.setInstructions("ESP32 basic device providing system diagnostics.");
 
-    server.tool(
-        "get_uptime",
-        "Returns the system uptime in seconds",
-        [](const MCPArguments& args) {
-            uint32_t sec = millis() / 1000;
-            return MCPResult::text("Uptime: " + String(sec) + " seconds");
-        }
-    );
+    // Fluent declarative tools with printf-style formatting
+    server.tool("get_uptime", "Returns the system uptime in seconds")
+          .readOnly()
+          .handle([](MCPResult& r) {
+              r.text("Uptime: %lu seconds", (unsigned long)(millis() / 1000));
+          });
 
-    server.tool(
-        "get_free_heap",
-        "Returns available free heap memory in bytes",
-        [](const MCPArguments& args) {
-            uint32_t freeHeap = ESP.getFreeHeap();
-            return MCPResult::text("Free heap: " + String(freeHeap) + " bytes");
-        }
-    );
+    server.tool("get_free_heap", "Returns available free heap memory in bytes")
+          .readOnly()
+          .handle([](MCPResult& r) {
+              r.text("Free heap: %lu bytes", (unsigned long)ESP.getFreeHeap());
+          });
+
+    // Or enable built-in status tool:
+    // server.enableStatus();
 
     server.begin();
-    Serial.println("MCP Server listening on /mcp");
+    Serial.println("MCP Server listening on /mcp (mDNS: esp32-basic.local)");
 }
 
 void loop() {
-    server.handleClient();
+    // Server runs in a background FreeRTOS task, keeping loop() free!
+    delay(1000);
 }

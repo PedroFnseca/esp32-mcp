@@ -4,9 +4,15 @@
 #include <string.h>
 #include <stdio.h>
 
+#if defined(ESP32) || defined(ARDUINO_ARCH_ESP32)
+#include <ESPmDNS.h>
+#include <WiFi.h>
+#endif
+
 MCPServer::MCPServer(const char* name, const char* version)
     : _transport(nullptr), _ownsTransport(false), _cacheTtlMs(60000),
-      _hasBearer(false), _authWarned(false), _useBackgroundTask(true) {
+      _hasBearer(false), _authWarned(false), _useBackgroundTask(true),
+      _allowedPinCount(0), _gpioReadPin(0), _gpioWritePin(0), _gpioWriteVal(0) {
     setName(name ? name : "ESP32-MCP");
     setVersion(version ? version : "0.0.1");
     setProtocolVersion("2026-07-28");
@@ -148,6 +154,70 @@ const char* MCPServer::getInstructions() const {
     return _instructions;
 }
 
+void MCPServer::enableStatus() {
+    tool("get_status", "Returns device status: free heap, uptime, WiFi RSSI, chip model and version")
+        .readOnly()
+        .handle([this](MCPResult& r) {
+            char buf[256];
+            int rssi = 0;
+#if defined(ESP32) || defined(ARDUINO_ARCH_ESP32)
+            if (WiFi.status() == WL_CONNECTED) {
+                rssi = WiFi.RSSI();
+            }
+#endif
+            snprintf(buf, sizeof(buf),
+                "{\"free_heap\":%lu,\"uptime_s\":%lu,\"wifi_rssi\":%d,\"chip_model\":\"%s\",\"version\":\"%s\"}",
+                (unsigned long)ESP.getFreeHeap(),
+                (unsigned long)(millis() / 1000),
+                rssi,
+                ESP.getChipModel(),
+                _version);
+            r.text(buf);
+        });
+}
+
+void MCPServer::enableGpio(std::initializer_list<int> allowedPins) {
+    _allowedPinCount = 0;
+    for (int pin : allowedPins) {
+        if (_allowedPinCount < sizeof(_allowedPins) / sizeof(_allowedPins[0])) {
+            _allowedPins[_allowedPinCount++] = pin;
+        }
+    }
+
+    tool("read_pin", "Read digital value from an allowed GPIO pin")
+        .readOnly()
+        .param("pin", &_gpioReadPin, "Allowed GPIO pin number")
+        .handle([this](MCPResult& r) {
+            if (!isPinAllowed(_gpioReadPin)) {
+                r.error("Pin not allowed");
+                return;
+            }
+            pinMode(_gpioReadPin, INPUT);
+            r.text("%d", digitalRead(_gpioReadPin));
+        });
+
+    tool("write_pin", "Write digital value to an allowed GPIO pin")
+        .destructive()
+        .param("pin", &_gpioWritePin, "Allowed GPIO pin number")
+        .param("value", &_gpioWriteVal, 0, 1)
+        .handle([this](MCPResult& r) {
+            if (!isPinAllowed(_gpioWritePin)) {
+                r.error("Pin not allowed");
+                return;
+            }
+            pinMode(_gpioWritePin, OUTPUT);
+            digitalWrite(_gpioWritePin, _gpioWriteVal ? HIGH : LOW);
+            r.text("Pin %d set to %d", _gpioWritePin, _gpioWriteVal);
+        });
+}
+
+bool MCPServer::isPinAllowed(int pin) const {
+    for (size_t i = 0; i < _allowedPinCount; ++i) {
+        if (_allowedPins[i] == pin) return true;
+    }
+    return false;
+}
+
 MCPToolBuilder MCPServer::tool(const char* name, const char* description) {
     return MCPToolBuilder(&_toolRegistry, name, description);
 }
@@ -203,6 +273,12 @@ bool MCPServer::begin(MCPTransport* transport) {
         if (!ok) return false;
 
 #if defined(ESP32) || defined(ARDUINO_ARCH_ESP32)
+        if (_name[0] != '\0') {
+            MDNS.begin(_name);
+            MDNS.addService("http", "tcp", 80);
+            MDNS.addServiceTxt("http", "tcp", "mcp", "2026-07-28");
+        }
+
         if (_useBackgroundTask) {
             xTaskCreatePinnedToCore(
                 [](void* param) {

@@ -127,13 +127,12 @@ inline uint32_t millis() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
 }
 
-inline void delay(uint32_t ms) {
-}
+inline void delay(uint32_t) {}
 
-inline void pinMode(uint8_t pin, uint8_t mode) {}
-inline void digitalWrite(uint8_t pin, uint8_t val) {}
-inline int digitalRead(uint8_t pin) { return LOW; }
-inline int analogRead(uint8_t pin) { return 512; }
+inline void pinMode(uint8_t, uint8_t) {}
+inline void digitalWrite(uint8_t, uint8_t) {}
+inline int digitalRead(uint8_t) { return LOW; }
+inline int analogRead(uint8_t) { return 512; }
 
 class MockESP {
 public:
@@ -144,7 +143,7 @@ public:
     uint8_t getChipRevision() const { return 1; }
     uint32_t getCpuFreqMHz() const { return 240; }
 };
-static MockESP ESP;
+static MockESP ESP __attribute__((unused));
 
 class MockSerial {
 public:
@@ -153,6 +152,6 @@ public:
     void print(int val) { std::cout << val; }
     void println(int val) { std::cout << val << "\n"; }
 };
-static MockSerial Serial;
+static MockSerial Serial __attribute__((unused));
 
 #endif

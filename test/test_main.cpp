@@ -1,36 +1,22 @@
+#include <unity.h>
 #include <iostream>
 #include <cassert>
 #include "Arduino.h"
-#include "../src/mcp/MCPTypes.h"
-#include "../src/mcp/MCPTool.h"
-#include "../src/mcp/MCPToolRegistry.h"
-#include "../src/mcp/MCPJsonRpc.h"
-#include "../src/mcp/MCPServer.h"
-#include "../src/mcp/json/MCPJsonScanner.h"
-#include "../src/mcp/json/MCPJsonWriter.h"
+#include "mcp/MCPTypes.h"
+#include "mcp/MCPTool.h"
+#include "mcp/MCPToolRegistry.h"
+#include "mcp/MCPJsonRpc.h"
+#include "mcp/MCPServer.h"
+#include "mcp/json/MCPJsonScanner.h"
+#include "mcp/json/MCPJsonWriter.h"
 
-int tests_passed = 0;
-int tests_failed = 0;
+void setUp(void) {}
+void tearDown(void) {}
 
-#define TEST_ASSERT(cond, msg) \
-    do { \
-        if (!(cond)) { \
-            std::cerr << "[FAIL] " << msg << " (" << __FILE__ << ":" << __LINE__ << ")" << std::endl; \
-            tests_failed++; \
-            return; \
-        } \
-    } while(0)
-
-#define RUN_TEST(fn) \
-    do { \
-        int before = tests_failed; \
-        std::cout << "[RUNNING] " << #fn << "..."; \
-        fn(); \
-        if (tests_failed == before) { \
-            tests_passed++; \
-            std::cout << " [PASS]" << std::endl; \
-        } \
-    } while(0)
+#ifdef TEST_ASSERT
+#undef TEST_ASSERT
+#endif
+#define TEST_ASSERT(cond, msg) TEST_ASSERT_TRUE_MESSAGE((cond), (msg))
 
 void test_json_rpc_parse_error() {
     MCPServer server;
@@ -105,14 +91,14 @@ void test_mcp_notification_no_response() {
 
 void test_tools_list() {
     MCPServer server;
-    server.tool("get_temp", "Reads temperature", [](const MCPArguments& args) {
+    server.tool("get_temp", "Reads temperature", [](const MCPArguments&) {
         return MCPResult::makeText("25.5 C");
     });
     server.tool(
         "set_led",
         "Control LED",
         "{\"type\":\"object\",\"properties\":{\"state\":{\"type\":\"boolean\"}},\"required\":[\"state\"]}",
-        [](const MCPArguments& args) {
+        [](const MCPArguments&) {
             return MCPResult::makeText("OK");
         }
     );
@@ -146,7 +132,7 @@ void test_tools_call_success() {
 
 void test_tools_call_error_handling() {
     MCPServer server;
-    server.tool("failing_tool", "Tool that fails", [](const MCPArguments& args) {
+    server.tool("failing_tool", "Tool that fails", [](const MCPArguments&) {
         return MCPResult::makeError("DEVICE_BUSY", "Sensor currently busy");
     });
 
@@ -170,10 +156,10 @@ void test_tools_call_unknown_tool() {
 
 void test_tools_overwrite_registration() {
     MCPServer server;
-    server.tool("sensor", "V1 description", [](const MCPArguments& args) {
+    server.tool("sensor", "V1 description", [](const MCPArguments&) {
         return MCPResult::makeText("V1");
     });
-    server.tool("sensor", "V2 description", [](const MCPArguments& args) {
+    server.tool("sensor", "V2 description", [](const MCPArguments&) {
         return MCPResult::makeText("V2");
     });
 
@@ -535,9 +521,7 @@ void test_builtin_status_and_gpio() {
 }
 
 int main() {
-    std::cout << "========================================" << std::endl;
-    std::cout << " Running ESP32-MCP Unit Test Suite      " << std::endl;
-    std::cout << "========================================" << std::endl;
+    UNITY_BEGIN();
 
     RUN_TEST(test_json_rpc_parse_error);
     RUN_TEST(test_json_rpc_empty_message);
@@ -574,9 +558,5 @@ int main() {
     RUN_TEST(test_security_bearer_and_cors);
     RUN_TEST(test_builtin_status_and_gpio);
 
-    std::cout << "========================================" << std::endl;
-    std::cout << " Test Summary: " << tests_passed << " passed, " << tests_failed << " failed" << std::endl;
-    std::cout << "========================================" << std::endl;
-
-    return tests_failed == 0 ? 0 : 1;
+    return UNITY_END();
 }

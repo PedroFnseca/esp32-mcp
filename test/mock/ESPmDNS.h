@@ -5,11 +5,11 @@
 
 class MockMDNS {
 public:
-    bool begin(const char* host) { return true; }
-    void addService(const char* service, const char* proto, uint16_t port) {}
-    void addServiceTxt(const char* service, const char* proto, const char* key, const char* value) {}
+    bool begin(const char*) { return true; }
+    void addService(const char*, const char*, uint16_t) {}
+    void addServiceTxt(const char*, const char*, const char*, const char*) {}
 };
 
-static MockMDNS MDNS;
+static MockMDNS MDNS __attribute__((unused));
 
 #endif

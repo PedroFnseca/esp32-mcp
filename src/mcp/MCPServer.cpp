@@ -21,6 +21,7 @@ MCPServer::MCPServer(const char* name, const char* version)
     _responseBuffer[0] = '\0';
     _bearerToken[0] = '\0';
     _allowedOrigin[0] = '\0';
+    memset(_allowedPins, 0, sizeof(_allowedPins));
 }
 
 void MCPServer::bearer(const char* token) {
@@ -521,8 +522,8 @@ bool MCPServer::handleToolsCall(const MCPRpcRequestView& req, MCPJsonWriter& wri
         return false;
     }
 
-    const MCPTool* tool = _toolRegistry.findTool(toolName);
-    if (!tool) {
+    const MCPTool* targetTool = _toolRegistry.findTool(toolName);
+    if (!targetTool) {
         char errMsg[128];
         snprintf(errMsg, sizeof(errMsg), "Unknown tool: %s", toolName);
         MCPJsonRpc::buildErrorResponse(writer, req.id, MCP_RPC_INVALID_PARAMS, errMsg);
@@ -533,16 +534,16 @@ bool MCPServer::handleToolsCall(const MCPRpcRequestView& req, MCPJsonWriter& wri
 
     int protoErrCode = 0;
     char protoErrMsg[128];
-    if (!tool->validateArgs(args, protoErrCode, protoErrMsg, sizeof(protoErrMsg))) {
+    if (!targetTool->validateArgs(args, protoErrCode, protoErrMsg, sizeof(protoErrMsg))) {
         MCPJsonRpc::buildErrorResponse(writer, req.id, protoErrCode, protoErrMsg);
         return false;
     }
 
     MCPResult res;
-    if (tool->fluentHandler) {
-        tool->fluentHandler(res);
-    } else if (tool->handler) {
-        res = tool->handler(args);
+    if (targetTool->fluentHandler) {
+        targetTool->fluentHandler(res);
+    } else if (targetTool->handler) {
+        res = targetTool->handler(args);
     }
 
     writer.startObject();

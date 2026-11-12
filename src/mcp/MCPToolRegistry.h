@@ -2,12 +2,13 @@
 #define ESP32_MCP_TOOL_REGISTRY_H
 
 #include <Arduino.h>
-#include <vector>
 #include "MCPTool.h"
+#include "json/MCPJsonConfig.h"
 
 class MCPToolRegistry {
 private:
-    std::vector<MCPTool> _tools;
+    MCPTool _tools[MCP_MAX_TOOLS];
+    size_t _count;
 
 public:
     MCPToolRegistry();
@@ -17,8 +18,9 @@ public:
     bool registerTool(const String& name, const String& description, MCPToolHandler handler);
     bool registerTool(const String& name, const String& description, const String& schemaJson, MCPToolHandler handler);
 
+    const MCPTool* findTool(const char* name) const;
     const MCPTool* findTool(const String& name) const;
-    const std::vector<MCPTool>& getTools() const;
+    const MCPTool* getTool(size_t index) const;
     size_t count() const;
     void clear();
 };

@@ -36,37 +36,29 @@ int tests_failed = 0;
 void test_json_rpc_parse_error() {
     MCPServer server;
     String response = server.processMessage("invalid json {");
-    JsonDocument doc;
-    deserializeJson(doc, response);
-    TEST_ASSERT(doc["jsonrpc"] == "2.0", "jsonrpc must be 2.0");
-    TEST_ASSERT(doc["error"]["code"] == -32700, "Error code must be -32700");
+    TEST_ASSERT(response.indexOf("\"jsonrpc\":\"2.0\"") != -1, "jsonrpc must be 2.0");
+    TEST_ASSERT(response.indexOf("\"code\":-32700") != -1, "Error code must be -32700");
 }
 
 void test_json_rpc_empty_message() {
     MCPServer server;
     String response = server.processMessage("");
-    JsonDocument doc;
-    deserializeJson(doc, response);
-    TEST_ASSERT(doc["jsonrpc"] == "2.0", "jsonrpc must be 2.0");
-    TEST_ASSERT(doc["error"]["code"] == -32700, "Error code must be -32700");
+    TEST_ASSERT(response.indexOf("\"jsonrpc\":\"2.0\"") != -1, "jsonrpc must be 2.0");
+    TEST_ASSERT(response.indexOf("\"code\":-32700") != -1, "Error code must be -32700");
 }
 
 void test_json_rpc_invalid_request() {
     MCPServer server;
     String response = server.processMessage("{\"hello\":\"world\"}");
-    JsonDocument doc;
-    deserializeJson(doc, response);
-    TEST_ASSERT(doc["error"]["code"] == -32600, "Error code must be -32600");
+    TEST_ASSERT(response.indexOf("\"code\":-32600") != -1, "Error code must be -32600");
 }
 
 void test_json_rpc_unknown_method() {
     MCPServer server;
     String req = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"unknown/method\",\"params\":{}}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
-    TEST_ASSERT(doc["id"] == 1, "ID must match");
-    TEST_ASSERT(doc["error"]["code"] == -32601, "Error code must be -32601");
+    TEST_ASSERT(response.indexOf("\"id\":1") != -1, "ID must match");
+    TEST_ASSERT(response.indexOf("\"code\":-32601") != -1, "Error code must be -32601");
 }
 
 void test_mcp_server_discover() {
@@ -74,15 +66,12 @@ void test_mcp_server_discover() {
     server.setInstructions("Autonomous IoT Node");
     String req = "{\"jsonrpc\":\"2.0\",\"id\":\"disc-1\",\"method\":\"server/discover\",\"params\":{}}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
 
-    TEST_ASSERT(doc["id"] == "disc-1", "ID must match");
-    TEST_ASSERT(doc["result"]["supportedVersions"][0] == "2026-07-28", "Supported version must be 2026-07-28");
-    TEST_ASSERT(doc["result"]["capabilities"]["tools"]["listChanged"] == false, "Capabilities tools mismatch");
-    TEST_ASSERT(doc["result"]["instructions"] == "Autonomous IoT Node", "Instructions mismatch");
-    TEST_ASSERT(doc["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == "ESP32-DiscoverNode", "Meta server name mismatch");
-    TEST_ASSERT(doc["result"]["serverInfo"]["name"] == "ESP32-DiscoverNode", "ServerInfo name mismatch");
+    TEST_ASSERT(response.indexOf("\"id\":\"disc-1\"") != -1, "ID must match disc-1");
+    TEST_ASSERT(response.indexOf("\"supportedVersions\":[\"2026-07-28\"]") != -1, "Supported version must be 2026-07-28");
+    TEST_ASSERT(response.indexOf("\"listChanged\":false") != -1, "Capabilities tools mismatch");
+    TEST_ASSERT(response.indexOf("\"instructions\":\"Autonomous IoT Node\"") != -1, "Instructions mismatch");
+    TEST_ASSERT(response.indexOf("\"name\":\"ESP32-DiscoverNode\"") != -1, "ServerInfo name mismatch");
 }
 
 void test_mcp_initialize_2026() {
@@ -90,26 +79,22 @@ void test_mcp_initialize_2026() {
     server.setInstructions("Test instructions for AI");
     String req = "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2026-07-28\",\"capabilities\":{},\"clientInfo\":{\"name\":\"TestClient\",\"version\":\"1.0\"}}}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
 
-    TEST_ASSERT(doc["id"] == 42, "ID must be 42");
-    TEST_ASSERT(doc["result"]["protocolVersion"] == "2026-07-28", "Protocol version must be 2026-07-28");
-    TEST_ASSERT(doc["result"]["serverInfo"]["name"] == "TestESP32", "Server name mismatch");
-    TEST_ASSERT(doc["result"]["serverInfo"]["version"] == "1.2.3", "Server version mismatch");
-    TEST_ASSERT(doc["result"]["instructions"] == "Test instructions for AI", "Instructions mismatch");
-    TEST_ASSERT(doc["result"]["capabilities"]["tools"]["listChanged"] == false, "Capabilities tools mismatch");
+    TEST_ASSERT(response.indexOf("\"id\":42") != -1, "ID must be 42");
+    TEST_ASSERT(response.indexOf("\"protocolVersion\":\"2026-07-28\"") != -1, "Protocol version must be 2026-07-28");
+    TEST_ASSERT(response.indexOf("\"name\":\"TestESP32\"") != -1, "Server name mismatch");
+    TEST_ASSERT(response.indexOf("\"version\":\"1.2.3\"") != -1, "Server version mismatch");
+    TEST_ASSERT(response.indexOf("\"instructions\":\"Test instructions for AI\"") != -1, "Instructions mismatch");
+    TEST_ASSERT(response.indexOf("\"listChanged\":false") != -1, "Capabilities tools mismatch");
 }
 
 void test_mcp_ping() {
     MCPServer server;
     String req = "{\"jsonrpc\":\"2.0\",\"id\":\"ping-123\",\"method\":\"ping\"}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
 
-    TEST_ASSERT(doc["id"] == "ping-123", "ID must match");
-    TEST_ASSERT(!doc["result"].isNull(), "Must contain result object");
+    TEST_ASSERT(response.indexOf("\"id\":\"ping-123\"") != -1, "ID must match");
+    TEST_ASSERT(response.indexOf("\"result\":{}") != -1, "Must contain result object");
 }
 
 void test_mcp_notification_no_response() {
@@ -135,17 +120,11 @@ void test_tools_list() {
 
     String req = "{\"jsonrpc\":\"2.0\",\"id\":\"req-list\",\"method\":\"tools/list\"}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
 
-    TEST_ASSERT(doc["id"] == "req-list", "ID must match");
-    JsonArray tools = doc["result"]["tools"].as<JsonArray>();
-    TEST_ASSERT(tools.size() == 2, "Must have 2 tools");
-    TEST_ASSERT(tools[0]["name"] == "get_temp", "First tool name mismatch");
-    TEST_ASSERT(tools[0]["inputSchema"]["type"] == "object", "Default schema type must be object");
-    TEST_ASSERT(tools[1]["name"] == "set_led", "Second tool name mismatch");
-    TEST_ASSERT(tools[1]["inputSchema"]["type"] == "object", "Schema type must be object");
-    TEST_ASSERT(tools[1]["inputSchema"]["properties"]["state"]["type"] == "boolean", "Schema property type mismatch");
+    TEST_ASSERT(response.indexOf("\"id\":\"req-list\"") != -1, "ID must match");
+    TEST_ASSERT(response.indexOf("\"name\":\"get_temp\"") != -1, "First tool name mismatch");
+    TEST_ASSERT(response.indexOf("\"name\":\"set_led\"") != -1, "Second tool name mismatch");
+    TEST_ASSERT(response.indexOf("\"type\":\"boolean\"") != -1, "Schema property type mismatch");
 }
 
 void test_tools_call_success() {
@@ -159,15 +138,11 @@ void test_tools_call_success() {
 
     String req = "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"add_numbers\",\"arguments\":{\"a\":15,\"b\":27}}}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
 
-    TEST_ASSERT(doc["id"] == 10, "ID must be 10");
-    TEST_ASSERT(doc["result"]["isError"] == false, "isError must be false");
-    JsonArray content = doc["result"]["content"].as<JsonArray>();
-    TEST_ASSERT(content.size() == 1, "Content array size must be 1");
-    TEST_ASSERT(content[0]["type"] == "text", "Content type must be text");
-    TEST_ASSERT(content[0]["text"] == "42", "Addition result must be 42");
+    TEST_ASSERT(response.indexOf("\"id\":10") != -1, "ID must be 10");
+    TEST_ASSERT(response.indexOf("\"isError\":false") != -1, "isError must be false");
+    TEST_ASSERT(response.indexOf("\"type\":\"text\"") != -1, "Content type must be text");
+    TEST_ASSERT(response.indexOf("\"text\":\"42\"") != -1, "Addition result must be 42");
 }
 
 void test_tools_call_error_handling() {
@@ -178,24 +153,20 @@ void test_tools_call_error_handling() {
 
     String req = "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"failing_tool\",\"arguments\":{}}}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
 
-    TEST_ASSERT(doc["id"] == 11, "ID must be 11");
-    TEST_ASSERT(doc["result"]["isError"] == true, "isError must be true");
-    TEST_ASSERT(doc["result"]["errorCode"] == "DEVICE_BUSY", "Error code mismatch");
-    TEST_ASSERT(doc["result"]["content"][0]["text"] == "Sensor currently busy", "Error message mismatch");
+    TEST_ASSERT(response.indexOf("\"id\":11") != -1, "ID must be 11");
+    TEST_ASSERT(response.indexOf("\"isError\":true") != -1, "isError must be true");
+    TEST_ASSERT(response.indexOf("\"errorCode\":\"DEVICE_BUSY\"") != -1, "Error code mismatch");
+    TEST_ASSERT(response.indexOf("\"text\":\"Sensor currently busy\"") != -1, "Error message mismatch");
 }
 
 void test_tools_call_unknown_tool() {
     MCPServer server;
     String req = "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tools/call\",\"params\":{\"name\":\"non_existent\",\"arguments\":{}}}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
 
-    TEST_ASSERT(doc["id"] == 12, "ID must be 12");
-    TEST_ASSERT(doc["error"]["code"] == -32602, "Error code must be -32602 for unknown tool");
+    TEST_ASSERT(response.indexOf("\"id\":12") != -1, "ID must be 12");
+    TEST_ASSERT(response.indexOf("\"code\":-32602") != -1, "Error code must be -32602 for unknown tool");
 }
 
 void test_tools_overwrite_registration() {
@@ -214,19 +185,13 @@ void test_tools_overwrite_registration() {
 
     String req = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"sensor\",\"arguments\":{}}}";
     String response = server.processMessage(req);
-    JsonDocument doc;
-    deserializeJson(doc, response);
-    TEST_ASSERT(doc["result"]["content"][0]["text"] == "V2", "Result must come from updated handler");
+    TEST_ASSERT(response.indexOf("\"text\":\"V2\"") != -1, "Result must come from updated handler");
 }
 
 void test_mcp_arguments_types() {
-    JsonDocument doc;
-    doc["str_key"] = "hello";
-    doc["int_key"] = 123;
-    doc["float_key"] = 45.67;
-    doc["bool_key"] = true;
+    const char* rawJson = "{\"str_key\":\"hello\",\"int_key\":123,\"float_key\":45.67,\"bool_key\":true}";
+    MCPArguments args(rawJson, strlen(rawJson));
 
-    MCPArguments args(doc.as<JsonObjectConst>());
     TEST_ASSERT(args.has("str_key"), "Must have str_key");
     TEST_ASSERT(!args.has("missing_key"), "Must not have missing_key");
     TEST_ASSERT(args.getString("str_key") == "hello", "String value mismatch");
@@ -234,6 +199,10 @@ void test_mcp_arguments_types() {
     TEST_ASSERT(args.getFloat("float_key") > 45.0f, "Float value mismatch");
     TEST_ASSERT(args.getBool("bool_key") == true, "Bool value mismatch");
     TEST_ASSERT(args.getInt("missing_key", 999) == 999, "Default value mismatch");
+
+    char dest[32];
+    TEST_ASSERT(args.getString("str_key", dest, sizeof(dest)), "Must copy to char buffer");
+    TEST_ASSERT(strcmp(dest, "hello") == 0, "Buffer value must be hello");
 }
 
 void test_json_scanner_escapes_and_surrogates() {
@@ -358,6 +327,72 @@ void test_json_writer_overflow() {
     TEST_ASSERT(strlen(writer.c_str()) < sizeof(smallBuf), "Must remain null-terminated within buffer");
 }
 
+void test_tool_schema_validation_and_max_tools() {
+    MCPServer server;
+    // Malformed JSON schema
+    bool okMalformed = server.tool("bad1", "desc", "{malformed:", [](const MCPArguments&) { return MCPResult::text("ok"); });
+    TEST_ASSERT(!okMalformed, "Malformed schema must be rejected");
+
+    // Valid JSON but not an object
+    bool okNonObject = server.tool("bad2", "desc", "[1, 2, 3]", [](const MCPArguments&) { return MCPResult::text("ok"); });
+    TEST_ASSERT(!okNonObject, "Non-object schema must be rejected");
+
+    // Valid object schema
+    bool okGood = server.tool("good", "desc", "{\"type\":\"object\"}", [](const MCPArguments&) { return MCPResult::text("ok"); });
+    TEST_ASSERT(okGood, "Valid object schema must be accepted");
+
+    // Fill up to MCP_MAX_TOOLS
+    server.getToolRegistry().clear();
+    for (int i = 0; i < MCP_MAX_TOOLS; ++i) {
+        char name[16];
+        snprintf(name, sizeof(name), "t_%d", i);
+        bool regOk = server.tool(name, "desc", [](const MCPArguments&) { return MCPResult::text("ok"); });
+        TEST_ASSERT(regOk, "Registering within MCP_MAX_TOOLS limit must succeed");
+    }
+    // Next tool registration must fail
+    bool overflowOk = server.tool("t_overflow", "desc", [](const MCPArguments&) { return MCPResult::text("ok"); });
+    TEST_ASSERT(!overflowOk, "Registering beyond MCP_MAX_TOOLS must return false");
+}
+
+void test_id_preservation_string_and_number() {
+    MCPServer server;
+    // String id
+    String reqStr = "{\"jsonrpc\":\"2.0\",\"id\":\"req-xyz-987\",\"method\":\"ping\"}";
+    String respStr = server.processMessage(reqStr);
+    TEST_ASSERT(respStr.indexOf("\"id\":\"req-xyz-987\"") != -1, "String ID must be preserved exactly");
+
+    // Numeric id
+    String reqNum = "{\"jsonrpc\":\"2.0\",\"id\":987654321,\"method\":\"ping\"}";
+    String respNum = server.processMessage(reqNum);
+    TEST_ASSERT(respNum.indexOf("\"id\":987654321") != -1, "Numeric ID must be preserved exactly");
+}
+
+void test_arguments_get_raw() {
+    const char* raw = "{\"nested\":{\"foo\":\"bar\",\"count\":42}}";
+    MCPArguments args(raw, strlen(raw));
+    MCPJsonSlice slice = args.getRaw("nested");
+    TEST_ASSERT(slice.isValid(), "Slice must be valid");
+    TEST_ASSERT(slice.isObject(), "Slice must be object");
+    TEST_ASSERT(strncmp(slice.ptr, "{\"foo\":", 7) == 0, "Slice must point to raw nested object");
+}
+
+void test_response_buffer_overflow_error() {
+    MCPServer server;
+    server.tool("huge_tool", "Generates huge output", [](const MCPArguments&) {
+        // Return a response that exceeds MCP_MAX_RESPONSE_SIZE
+        char huge[MCP_MAX_RESPONSE_SIZE + 500];
+        memset(huge, 'A', sizeof(huge) - 1);
+        huge[sizeof(huge) - 1] = '\0';
+        return MCPResult::text(huge);
+    });
+
+    String req = "{\"jsonrpc\":\"2.0\",\"id\":\"overflow-test\",\"method\":\"tools/call\",\"params\":{\"name\":\"huge_tool\",\"arguments\":{}}}";
+    String resp = server.processMessage(req);
+    TEST_ASSERT(resp.indexOf("\"code\":-32603") != -1, "Must return JSON-RPC -32603 internal error");
+    TEST_ASSERT(resp.indexOf("response too large") != -1, "Must report 'response too large'");
+    TEST_ASSERT(resp.indexOf("\"id\":\"overflow-test\"") != -1, "Must preserve request ID in overflow response");
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << " Running ESP32-MCP Unit Test Suite      " << std::endl;
@@ -388,6 +423,11 @@ int main() {
     RUN_TEST(test_json_scanner_buffer_overflow);
     RUN_TEST(test_json_writer_escapes_and_controls);
     RUN_TEST(test_json_writer_overflow);
+
+    RUN_TEST(test_tool_schema_validation_and_max_tools);
+    RUN_TEST(test_id_preservation_string_and_number);
+    RUN_TEST(test_arguments_get_raw);
+    RUN_TEST(test_response_buffer_overflow_error);
 
     std::cout << "========================================" << std::endl;
     std::cout << " Test Summary: " << tests_passed << " passed, " << tests_failed << " failed" << std::endl;

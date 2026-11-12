@@ -2,8 +2,9 @@
 #define ESP32_MCP_TYPES_H
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
-#include <vector>
+#include "json/MCPJsonConfig.h"
+#include "json/MCPJsonScanner.h"
+#include "json/MCPJsonWriter.h"
 
 enum MCPErrorCode {
     MCP_RPC_PARSE_ERROR = -32700,
@@ -56,65 +57,114 @@ public:
     }
 };
 
+/**
+ * MCPArguments wraps a slice of the incoming request JSON buffer.
+ * WARNING: Values point directly to the request buffer and are ONLY valid during the tool handler invocation.
+ */
 class MCPArguments {
 private:
-    JsonObjectConst _obj;
+    const char* _argsJson;
+    size_t _argsLen;
 
 public:
-    MCPArguments() {}
-    MCPArguments(JsonObjectConst obj) : _obj(obj) {}
+    MCPArguments() : _argsJson(nullptr), _argsLen(0) {}
+    MCPArguments(const char* argsJson, size_t argsLen) : _argsJson(argsJson), _argsLen(argsLen) {}
+
+    bool has(const char* key) const {
+        if (!_argsJson || _argsLen == 0 || !key) return false;
+        MCPJsonSlice slice = MCPJsonScanner::findKey(_argsJson, _argsLen, key);
+        return slice.isValid() && !slice.isNull();
+    }
 
     bool has(const String& key) const {
-        if (_obj.isNull()) return false;
-        return !_obj[key.c_str()].isNull();
+        return has(key.c_str());
+    }
+
+    bool getString(const char* key, char* out, size_t outCapacity) const {
+        if (!has(key)) return false;
+        MCPJsonSlice slice = MCPJsonScanner::findKey(_argsJson, _argsLen, key);
+        return slice.decodeString(out, outCapacity);
+    }
+
+    String getString(const char* key, const String& defaultValue = "") const {
+        if (!has(key)) return defaultValue;
+        MCPJsonSlice slice = MCPJsonScanner::findKey(_argsJson, _argsLen, key);
+        char buf[256];
+        if (slice.decodeString(buf, sizeof(buf))) {
+            return String(buf);
+        }
+        return defaultValue;
     }
 
     String getString(const String& key, const String& defaultValue = "") const {
+        return getString(key.c_str(), defaultValue);
+    }
+
+    int getInt(const char* key, int defaultValue = 0) const {
         if (!has(key)) return defaultValue;
-        JsonVariantConst v = _obj[key.c_str()];
-        if (v.is<const char*>()) {
-            return String(v.as<const char*>());
-        }
-        return v.as<String>();
+        MCPJsonSlice slice = MCPJsonScanner::findKey(_argsJson, _argsLen, key);
+        return slice.asInt(defaultValue);
     }
 
     int getInt(const String& key, int defaultValue = 0) const {
+        return getInt(key.c_str(), defaultValue);
+    }
+
+    long getLong(const char* key, long defaultValue = 0) const {
         if (!has(key)) return defaultValue;
-        return _obj[key.c_str()].as<int>();
+        MCPJsonSlice slice = MCPJsonScanner::findKey(_argsJson, _argsLen, key);
+        return slice.asLong(defaultValue);
     }
 
     long getLong(const String& key, long defaultValue = 0) const {
+        return getLong(key.c_str(), defaultValue);
+    }
+
+    float getFloat(const char* key, float defaultValue = 0.0f) const {
         if (!has(key)) return defaultValue;
-        return _obj[key.c_str()].as<long>();
+        MCPJsonSlice slice = MCPJsonScanner::findKey(_argsJson, _argsLen, key);
+        return slice.asFloat(defaultValue);
     }
 
     float getFloat(const String& key, float defaultValue = 0.0f) const {
+        return getFloat(key.c_str(), defaultValue);
+    }
+
+    double getDouble(const char* key, double defaultValue = 0.0) const {
         if (!has(key)) return defaultValue;
-        return _obj[key.c_str()].as<float>();
+        MCPJsonSlice slice = MCPJsonScanner::findKey(_argsJson, _argsLen, key);
+        return slice.asDouble(defaultValue);
     }
 
     double getDouble(const String& key, double defaultValue = 0.0) const {
+        return getDouble(key.c_str(), defaultValue);
+    }
+
+    bool getBool(const char* key, bool defaultValue = false) const {
         if (!has(key)) return defaultValue;
-        return _obj[key.c_str()].as<double>();
+        MCPJsonSlice slice = MCPJsonScanner::findKey(_argsJson, _argsLen, key);
+        return slice.asBool(defaultValue);
     }
 
     bool getBool(const String& key, bool defaultValue = false) const {
-        if (!has(key)) return defaultValue;
-        return _obj[key.c_str()].as<bool>();
+        return getBool(key.c_str(), defaultValue);
     }
 
-    JsonObjectConst getObject(const String& key) const {
-        if (!has(key)) return JsonObjectConst();
-        return _obj[key.c_str()].as<JsonObjectConst>();
+    MCPJsonSlice getRaw(const char* key) const {
+        if (!_argsJson || _argsLen == 0 || !key) return MCPJsonSlice();
+        return MCPJsonScanner::findKey(_argsJson, _argsLen, key);
     }
 
-    JsonArrayConst getArray(const String& key) const {
-        if (!has(key)) return JsonArrayConst();
-        return _obj[key.c_str()].as<JsonArrayConst>();
+    MCPJsonSlice getRaw(const String& key) const {
+        return getRaw(key.c_str());
     }
 
-    JsonObjectConst raw() const {
-        return _obj;
+    const char* rawJson() const {
+        return _argsJson;
+    }
+
+    size_t rawLength() const {
+        return _argsLen;
     }
 };
 

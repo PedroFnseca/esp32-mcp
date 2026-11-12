@@ -14,7 +14,9 @@ void MCPJsonWriter::reset() {
     _overflow = false;
     _depth = 0;
     for (int i = 0; i < MCP_MAX_JSON_DEPTH; ++i) {
+        _containerStack[i] = CONTAINER_NONE;
         _needsComma[i] = false;
+        _inKey[i] = false;
     }
     if (_buffer && _capacity > 0) {
         _buffer[0] = '\0';
@@ -62,12 +64,26 @@ void MCPJsonWriter::writeCommaIfNeeded() {
     }
 }
 
+void MCPJsonWriter::prepareValue() {
+    if (_depth > 0 && _depth < MCP_MAX_JSON_DEPTH) {
+        if (_containerStack[_depth] == CONTAINER_OBJECT) {
+            if (_inKey[_depth]) {
+                _inKey[_depth] = false;
+            }
+        } else if (_containerStack[_depth] == CONTAINER_ARRAY) {
+            writeCommaIfNeeded();
+        }
+    }
+}
+
 bool MCPJsonWriter::startObject() {
-    writeCommaIfNeeded();
+    prepareValue();
     if (!appendChar('{')) return false;
     if (_depth + 1 < MCP_MAX_JSON_DEPTH) {
         _depth++;
+        _containerStack[_depth] = CONTAINER_OBJECT;
         _needsComma[_depth] = false;
+        _inKey[_depth] = false;
     }
     return !_overflow;
 }
@@ -80,11 +96,13 @@ bool MCPJsonWriter::endObject() {
 }
 
 bool MCPJsonWriter::startArray() {
-    writeCommaIfNeeded();
+    prepareValue();
     if (!appendChar('[')) return false;
     if (_depth + 1 < MCP_MAX_JSON_DEPTH) {
         _depth++;
+        _containerStack[_depth] = CONTAINER_ARRAY;
         _needsComma[_depth] = false;
+        _inKey[_depth] = false;
     }
     return !_overflow;
 }
@@ -100,6 +118,9 @@ bool MCPJsonWriter::writeKey(const char* key) {
     if (!key) return false;
     writeCommaIfNeeded();
     if (!writeStringEscaped(key, strlen(key))) return false;
+    if (_depth > 0 && _depth < MCP_MAX_JSON_DEPTH) {
+        _inKey[_depth] = true;
+    }
     return appendChar(':');
 }
 
@@ -144,19 +165,19 @@ bool MCPJsonWriter::writeStringEscaped(const char* str, size_t len) {
 }
 
 bool MCPJsonWriter::writeString(const char* val) {
-    writeCommaIfNeeded();
+    prepareValue();
     if (!val) return writeNull();
     return writeStringEscaped(val, strlen(val));
 }
 
 bool MCPJsonWriter::writeRaw(const char* raw, size_t len) {
-    writeCommaIfNeeded();
+    prepareValue();
     if (!raw || len == 0) return writeNull();
     return appendBytes(raw, len);
 }
 
 bool MCPJsonWriter::writeLong(long val) {
-    writeCommaIfNeeded();
+    prepareValue();
     char buf[32];
     int n = snprintf(buf, sizeof(buf), "%ld", val);
     if (n <= 0) return false;
@@ -164,7 +185,7 @@ bool MCPJsonWriter::writeLong(long val) {
 }
 
 bool MCPJsonWriter::writeDouble(double val, int decimals) {
-    writeCommaIfNeeded();
+    prepareValue();
     char buf[48];
     int n = snprintf(buf, sizeof(buf), "%.*f", decimals, val);
     if (n <= 0) return false;
@@ -172,23 +193,23 @@ bool MCPJsonWriter::writeDouble(double val, int decimals) {
 }
 
 bool MCPJsonWriter::writeBool(bool val) {
-    writeCommaIfNeeded();
+    prepareValue();
     return val ? appendBytes("true", 4) : appendBytes("false", 5);
 }
 
 bool MCPJsonWriter::writeNull() {
-    writeCommaIfNeeded();
+    prepareValue();
     return appendBytes("null", 4);
 }
 
 bool MCPJsonWriter::addString(const char* key, const char* val) {
     if (!writeKey(key)) return false;
-    return writeStringEscaped(val, val ? strlen(val) : 0);
+    return writeString(val);
 }
 
 bool MCPJsonWriter::addRaw(const char* key, const char* rawJson, size_t rawLen) {
     if (!writeKey(key)) return false;
-    return appendBytes(rawJson, rawLen);
+    return writeRaw(rawJson, rawLen);
 }
 
 bool MCPJsonWriter::addLong(const char* key, long val) {

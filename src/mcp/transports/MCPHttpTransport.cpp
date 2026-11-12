@@ -50,13 +50,13 @@ bool MCPHttpTransport::begin() {
             return;
         }
 
-        String requestBody = _httpServer->arg("plain");
-        String responseBody = _server->processMessage(requestBody);
+        const String& requestBody = _httpServer->arg("plain");
+        size_t respLen = _server->processMessage(requestBody.c_str(), requestBody.length(), _server->getResponseBuffer(), _server->getResponseBufferSize());
 
-        if (responseBody.length() == 0) {
+        if (respLen == 0) {
             _httpServer->send(204);
         } else {
-            _httpServer->send(200, "application/json", responseBody);
+            _httpServer->send(200, "application/json", _server->getResponseBuffer());
         }
     });
 

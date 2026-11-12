@@ -1,130 +1,87 @@
 #include "MCPJsonRpc.h"
 #include "MCPServer.h"
+#include <string.h>
 
-void MCPJsonRpc::buildErrorResponse(JsonDocument& doc, JsonVariantConst id, int code, const String& message) {
-    doc.clear();
-    doc["jsonrpc"] = "2.0";
-    if (id.isNull()) {
-        doc["id"] = nullptr;
+void MCPJsonRpc::buildErrorResponse(MCPJsonWriter& writer, const MCPJsonSlice& id, int code, const char* message) {
+    writer.reset();
+    writer.startObject();
+    writer.addString("jsonrpc", "2.0");
+    if (id.isValid() && !id.isNull()) {
+        writer.addRaw("id", id.ptr, id.len);
     } else {
-        doc["id"] = id;
+        writer.addNull("id");
     }
-    JsonObject err = doc["error"].to<JsonObject>();
-    err["code"] = code;
-    err["message"] = message;
+    writer.writeKey("error");
+    writer.startObject();
+    writer.addLong("code", code);
+    writer.addString("message", message);
+    writer.endObject();
+    writer.endObject();
 }
 
-void MCPJsonRpc::buildSuccessResponse(JsonDocument& doc, JsonVariantConst id, JsonVariantConst result) {
-    doc.clear();
-    doc["jsonrpc"] = "2.0";
-    if (id.isNull()) {
-        doc["id"] = nullptr;
-    } else {
-        doc["id"] = id;
+size_t MCPJsonRpc::process(const char* request, size_t length, char* responseOut, size_t responseCapacity, MCPServer& server) {
+    MCPJsonWriter writer(responseOut, responseCapacity);
+
+    if (!request || length == 0) {
+        buildErrorResponse(writer, MCPJsonSlice(), MCP_RPC_PARSE_ERROR, "Parse error");
+        return writer.length();
     }
-    doc["result"] = result;
+
+    MCPRpcRequestView reqView;
+    MCPScanError scanErr = MCPScanError::None;
+    if (!MCPJsonScanner::parseRpcRequest(request, length, reqView, &scanErr)) {
+        buildErrorResponse(writer, MCPJsonSlice(), MCP_RPC_PARSE_ERROR, "Parse error");
+        return writer.length();
+    }
+
+    if (!reqView.jsonrpc.isString() || !reqView.jsonrpc.equalsString("2.0")) {
+        buildErrorResponse(writer, reqView.id, MCP_RPC_INVALID_REQUEST, "Invalid Request: jsonrpc must be '2.0'");
+        return writer.length();
+    }
+
+    if (!reqView.method.isString() || reqView.method.len == 0) {
+        buildErrorResponse(writer, reqView.id, MCP_RPC_INVALID_REQUEST, "Invalid Request: missing method");
+        return writer.length();
+    }
+
+    if (reqView.isNotification) {
+        return 0;
+    }
+
+    char method[64];
+    if (!reqView.method.decodeString(method, sizeof(method))) {
+        buildErrorResponse(writer, reqView.id, MCP_RPC_INVALID_REQUEST, "Invalid Request: invalid method string");
+        return writer.length();
+    }
+
+    if (strcmp(method, "server/discover") == 0) {
+        server.handleServerDiscover(reqView, writer);
+    } else if (strcmp(method, "initialize") == 0) {
+        server.handleInitialize(reqView, writer);
+    } else if (strcmp(method, "ping") == 0) {
+        server.handlePing(reqView, writer);
+    } else if (strcmp(method, "tools/list") == 0) {
+        server.handleToolsList(reqView, writer);
+    } else if (strcmp(method, "tools/call") == 0) {
+        server.handleToolsCall(reqView, writer);
+    } else {
+        char errBuf[128];
+        snprintf(errBuf, sizeof(errBuf), "Method not found: %s", method);
+        buildErrorResponse(writer, reqView.id, MCP_RPC_METHOD_NOT_FOUND, errBuf);
+    }
+
+    if (writer.isOverflow()) {
+        buildErrorResponse(writer, reqView.id, MCP_RPC_INTERNAL_ERROR, "response too large");
+    }
+
+    return writer.length();
 }
 
 String MCPJsonRpc::process(const String& rawJson, MCPServer& server) {
-    if (rawJson.length() == 0) {
-        JsonDocument errDoc;
-        buildErrorResponse(errDoc, JsonVariantConst(), MCP_RPC_PARSE_ERROR, "Parse error");
-        String out;
-        serializeJson(errDoc, out);
-        return out;
+    char respBuf[MCP_MAX_RESPONSE_SIZE];
+    size_t len = process(rawJson.c_str(), rawJson.length(), respBuf, sizeof(respBuf), server);
+    if (len == 0) {
+        return String("");
     }
-
-    JsonDocument requestDoc;
-    DeserializationError err = deserializeJson(requestDoc, rawJson);
-    if (err) {
-        JsonDocument errDoc;
-        buildErrorResponse(errDoc, JsonVariantConst(), MCP_RPC_PARSE_ERROR, "Parse error");
-        String out;
-        serializeJson(errDoc, out);
-        return out;
-    }
-
-    if (!requestDoc.is<JsonObject>()) {
-        JsonDocument errDoc;
-        buildErrorResponse(errDoc, JsonVariantConst(), MCP_RPC_INVALID_REQUEST, "Invalid Request");
-        String out;
-        serializeJson(errDoc, out);
-        return out;
-    }
-
-    JsonObjectConst req = requestDoc.as<JsonObjectConst>();
-
-    if (req["jsonrpc"].isNull() || String(req["jsonrpc"].as<const char*>()) != "2.0") {
-        JsonDocument errDoc;
-        JsonVariantConst id = req["id"];
-        buildErrorResponse(errDoc, id, MCP_RPC_INVALID_REQUEST, "Invalid Request: jsonrpc must be '2.0'");
-        String out;
-        serializeJson(errDoc, out);
-        return out;
-    }
-
-    if (req["method"].isNull() || !req["method"].is<const char*>()) {
-        JsonDocument errDoc;
-        JsonVariantConst id = req["id"];
-        buildErrorResponse(errDoc, id, MCP_RPC_INVALID_REQUEST, "Invalid Request: missing method");
-        String out;
-        serializeJson(errDoc, out);
-        return out;
-    }
-
-    String method = req["method"].as<const char*>();
-    bool isNotification = req["id"].isNull();
-    JsonVariantConst id = req["id"];
-    JsonObjectConst params = req["params"].as<JsonObjectConst>();
-
-    if (isNotification) {
-        return "";
-    }
-
-    JsonDocument responseDoc;
-    JsonObject resultObj = responseDoc["result"].to<JsonObject>();
-
-    if (method == "server/discover") {
-        if (server.handleServerDiscover(params, resultObj)) {
-            responseDoc["jsonrpc"] = "2.0";
-            responseDoc["id"] = id;
-        } else {
-            buildErrorResponse(responseDoc, id, MCP_RPC_INTERNAL_ERROR, "Discovery failed");
-        }
-    } else if (method == "initialize") {
-        if (server.handleInitialize(params, resultObj)) {
-            responseDoc["jsonrpc"] = "2.0";
-            responseDoc["id"] = id;
-        } else {
-            buildErrorResponse(responseDoc, id, MCP_RPC_INTERNAL_ERROR, "Initialize failed");
-        }
-    } else if (method == "ping") {
-        server.handlePing(params, resultObj);
-        responseDoc["jsonrpc"] = "2.0";
-        responseDoc["id"] = id;
-    } else if (method == "tools/list") {
-        if (server.handleToolsList(params, resultObj)) {
-            responseDoc["jsonrpc"] = "2.0";
-            responseDoc["id"] = id;
-        } else {
-            buildErrorResponse(responseDoc, id, MCP_RPC_INTERNAL_ERROR, "Failed to list tools");
-        }
-    } else if (method == "tools/call") {
-        bool isProtocolError = false;
-        int errorCode = 0;
-        String errorMessage = "";
-        bool ok = server.handleToolsCall(params, resultObj, isProtocolError, errorCode, errorMessage);
-        if (!ok && isProtocolError) {
-            buildErrorResponse(responseDoc, id, errorCode, errorMessage);
-        } else {
-            responseDoc["jsonrpc"] = "2.0";
-            responseDoc["id"] = id;
-        }
-    } else {
-        buildErrorResponse(responseDoc, id, MCP_RPC_METHOD_NOT_FOUND, "Method not found: " + method);
-    }
-
-    String output;
-    serializeJson(responseDoc, output);
-    return output;
+    return String(respBuf);
 }

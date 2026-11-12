@@ -2,10 +2,12 @@
 #define ESP32_MCP_SERVER_H
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include "MCPTypes.h"
 #include "MCPTool.h"
 #include "MCPToolRegistry.h"
+#include "json/MCPJsonConfig.h"
+#include "json/MCPJsonScanner.h"
+#include "json/MCPJsonWriter.h"
 #include "transports/MCPTransport.h"
 
 class MCPServer {
@@ -17,6 +19,9 @@ private:
     MCPToolRegistry _toolRegistry;
     MCPTransport* _transport;
     bool _ownsTransport;
+
+    char _requestBuffer[MCP_MAX_REQUEST_SIZE];
+    char _responseBuffer[MCP_MAX_RESPONSE_SIZE];
 
 public:
     MCPServer(const String& name = "ESP32-MCP", const String& version = "0.0.1");
@@ -44,13 +49,19 @@ public:
     bool begin(MCPTransport* transport = nullptr);
     void handleClient();
 
+    size_t processMessage(const char* request, size_t length, char* responseOut, size_t responseCapacity);
     String processMessage(const String& message);
 
-    bool handleServerDiscover(JsonObjectConst params, JsonObject result);
-    bool handleInitialize(JsonObjectConst params, JsonObject result);
-    bool handlePing(JsonObjectConst params, JsonObject result);
-    bool handleToolsList(JsonObjectConst params, JsonObject result);
-    bool handleToolsCall(JsonObjectConst params, JsonObject result, bool& isProtocolError, int& errorCode, String& errorMessage);
+    char* getRequestBuffer() { return _requestBuffer; }
+    size_t getRequestBufferSize() const { return sizeof(_requestBuffer); }
+    char* getResponseBuffer() { return _responseBuffer; }
+    size_t getResponseBufferSize() const { return sizeof(_responseBuffer); }
+
+    bool handleServerDiscover(const MCPRpcRequestView& req, MCPJsonWriter& writer);
+    bool handleInitialize(const MCPRpcRequestView& req, MCPJsonWriter& writer);
+    bool handlePing(const MCPRpcRequestView& req, MCPJsonWriter& writer);
+    bool handleToolsList(const MCPRpcRequestView& req, MCPJsonWriter& writer);
+    bool handleToolsCall(const MCPRpcRequestView& req, MCPJsonWriter& writer);
 };
 
 #endif

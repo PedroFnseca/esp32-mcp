@@ -8,16 +8,25 @@
 
 class MCPJsonWriter {
 private:
+    enum ContainerType {
+        CONTAINER_NONE = 0,
+        CONTAINER_OBJECT,
+        CONTAINER_ARRAY
+    };
+
     char* _buffer;
     size_t _capacity;
     size_t _size;
     bool _overflow;
+    ContainerType _containerStack[MCP_MAX_JSON_DEPTH];
     bool _needsComma[MCP_MAX_JSON_DEPTH];
+    bool _inKey[MCP_MAX_JSON_DEPTH];
     int _depth;
 
     bool appendChar(char c);
     bool appendBytes(const char* bytes, size_t count);
     void writeCommaIfNeeded();
+    void prepareValue();
 
 public:
     MCPJsonWriter(char* buffer, size_t capacity);

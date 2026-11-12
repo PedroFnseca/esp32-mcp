@@ -44,6 +44,9 @@ public:
     void setInstructions(const String& instructions);
     const char* getInstructions() const;
 
+    MCPToolBuilder tool(const char* name, const char* description);
+    MCPToolBuilder tool(const String& name, const String& description);
+
     bool tool(const char* name, const char* description, MCPToolHandler handler);
     bool tool(const char* name, const char* description, const char* schemaJson, MCPToolHandler handler);
     bool tool(const String& name, const String& description, MCPToolHandler handler);

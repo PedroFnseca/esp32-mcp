@@ -391,6 +391,58 @@ void test_response_buffer_overflow_error() {
     TEST_ASSERT(resp.indexOf("\"id\":\"overflow-test\"") != -1, "Must preserve request ID in overflow response");
 }
 
+void test_fluent_tool_builder_and_validation() {
+    MCPServer server;
+    static bool ledState = false;
+    static int brightness = 0;
+    static char mode[16] = {0};
+
+    server.tool("set_led", "Turns the onboard LED ON or OFF")
+          .title("LED Controller")
+          .readOnly()
+          .param("state", &ledState, "true for ON, false for OFF")
+          .param("brightness", &brightness, 0, 255, "PWM brightness 0-255")
+          .param("mode", mode, sizeof(mode), "Operation mode").optional()
+          .handle([&](MCPResult& r) {
+              r.text("LED %s brightness %d", ledState ? "ON" : "OFF", brightness);
+          });
+
+    // 1. Check tools/list generated schema and annotations
+    String listReq = "{\"jsonrpc\":\"2.0\",\"id\":\"list-1\",\"method\":\"tools/list\"}";
+    String listResp = server.processMessage(listReq);
+    TEST_ASSERT(listResp.indexOf("\"name\":\"set_led\"") != -1, "Tool name must be set_led");
+    TEST_ASSERT(listResp.indexOf("\"title\":\"LED Controller\"") != -1, "Title must be present");
+    TEST_ASSERT(listResp.indexOf("\"readOnly\":true") != -1, "Annotation readOnly must be true");
+    TEST_ASSERT(listResp.indexOf("\"minimum\":0") != -1, "Minimum must be 0");
+    TEST_ASSERT(listResp.indexOf("\"maximum\":255") != -1, "Maximum must be 255");
+    TEST_ASSERT(listResp.indexOf("\"required\":[\"state\",\"brightness\"]") != -1, "Only state and brightness must be required");
+
+    // 2. Missing required parameter 'brightness' -> -32602
+    String missingReq = "{\"jsonrpc\":\"2.0\",\"id\":\"call-1\",\"method\":\"tools/call\",\"params\":{\"name\":\"set_led\",\"arguments\":{\"state\":true}}}";
+    String missingResp = server.processMessage(missingReq);
+    TEST_ASSERT(missingResp.indexOf("\"code\":-32602") != -1, "Missing param must return JSON-RPC -32602");
+    TEST_ASSERT(missingResp.indexOf("Missing required parameter: brightness") != -1, "Error message must name missing param");
+
+    // 3. Out of range value (brightness = 500) -> -32602
+    String outOfRangeReq = "{\"jsonrpc\":\"2.0\",\"id\":\"call-2\",\"method\":\"tools/call\",\"params\":{\"name\":\"set_led\",\"arguments\":{\"state\":true,\"brightness\":500}}}";
+    String outOfRangeResp = server.processMessage(outOfRangeReq);
+    TEST_ASSERT(outOfRangeResp.indexOf("\"code\":-32602") != -1, "Out of range value must return JSON-RPC -32602");
+
+    // 4. Invalid parameter type (state = 123 instead of boolean) -> -32602
+    String badTypeReq = "{\"jsonrpc\":\"2.0\",\"id\":\"call-3\",\"method\":\"tools/call\",\"params\":{\"name\":\"set_led\",\"arguments\":{\"state\":123,\"brightness\":100}}}";
+    String badTypeResp = server.processMessage(badTypeReq);
+    TEST_ASSERT(badTypeResp.indexOf("\"code\":-32602") != -1, "Bad param type must return JSON-RPC -32602");
+
+    // 5. Successful call with binding verification
+    String goodReq = "{\"jsonrpc\":\"2.0\",\"id\":\"call-4\",\"method\":\"tools/call\",\"params\":{\"name\":\"set_led\",\"arguments\":{\"state\":true,\"brightness\":200,\"mode\":\"blink\"}}}";
+    String goodResp = server.processMessage(goodReq);
+    TEST_ASSERT(goodResp.indexOf("\"isError\":false") != -1, "Call must succeed");
+    TEST_ASSERT(goodResp.indexOf("LED ON brightness 200") != -1, "Handler output formatted correctly");
+    TEST_ASSERT(ledState == true, "Target variable ledState must be updated to true");
+    TEST_ASSERT(brightness == 200, "Target variable brightness must be updated to 200");
+    TEST_ASSERT(strcmp(mode, "blink") == 0, "Target variable mode must be updated to blink");
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << " Running ESP32-MCP Unit Test Suite      " << std::endl;
@@ -426,6 +478,7 @@ int main() {
     RUN_TEST(test_id_preservation_string_and_number);
     RUN_TEST(test_arguments_get_raw);
     RUN_TEST(test_response_buffer_overflow_error);
+    RUN_TEST(test_fluent_tool_builder_and_validation);
 
     std::cout << "========================================" << std::endl;
     std::cout << " Test Summary: " << tests_passed << " passed, " << tests_failed << " failed" << std::endl;

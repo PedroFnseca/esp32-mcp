@@ -48,6 +48,7 @@ jobs:
           g++ -std=c++14 -Isrc -Itest/mock \
             src/mcp/json/MCPJsonScanner.cpp \
             src/mcp/json/MCPJsonWriter.cpp \
+            src/mcp/MCPTool.cpp \
             src/mcp/MCPToolRegistry.cpp \
             src/mcp/MCPJsonRpc.cpp \
             src/mcp/MCPServer.cpp \
@@ -62,6 +63,7 @@ jobs:
           g++ -std=c++14 -Isrc -Itest/mock `
             src/mcp/json/MCPJsonScanner.cpp `
             src/mcp/json/MCPJsonWriter.cpp `
+            src/mcp/MCPTool.cpp `
             src/mcp/MCPToolRegistry.cpp `
             src/mcp/MCPJsonRpc.cpp `
             src/mcp/MCPServer.cpp `

@@ -77,6 +77,14 @@ const char* MCPServer::getInstructions() const {
     return _instructions;
 }
 
+MCPToolBuilder MCPServer::tool(const char* name, const char* description) {
+    return MCPToolBuilder(&_toolRegistry, name, description);
+}
+
+MCPToolBuilder MCPServer::tool(const String& name, const String& description) {
+    return tool(name.c_str(), description.c_str());
+}
+
 bool MCPServer::tool(const char* name, const char* description, MCPToolHandler handler) {
     return _toolRegistry.registerTool(name, description, handler);
 }
@@ -259,6 +267,17 @@ bool MCPServer::handleToolsList(const MCPRpcRequestView& req, MCPJsonWriter& wri
         writer.startObject();
         writer.addString("name", t->name);
         writer.addString("description", t->description);
+        if (t->title[0] != '\0') {
+            writer.addString("title", t->title);
+        }
+        if (t->isReadOnly || t->isDestructive || t->isIdempotent) {
+            writer.writeKey("annotations");
+            writer.startObject();
+            if (t->isReadOnly) writer.addBool("readOnly", true);
+            if (t->isDestructive) writer.addBool("destructive", true);
+            if (t->isIdempotent) writer.addBool("idempotent", true);
+            writer.endObject();
+        }
         if (t->inputSchemaJson && t->inputSchemaJson[0] != '\0') {
             writer.addRaw("inputSchema", t->inputSchemaJson, strlen(t->inputSchemaJson));
         } else {
@@ -294,7 +313,20 @@ bool MCPServer::handleToolsCall(const MCPRpcRequestView& req, MCPJsonWriter& wri
     }
 
     MCPArguments args(req.paramsArguments.ptr, req.paramsArguments.len);
-    MCPResult res = tool->handler(args);
+
+    int protoErrCode = 0;
+    char protoErrMsg[128];
+    if (!tool->validateArgs(args, protoErrCode, protoErrMsg, sizeof(protoErrMsg))) {
+        MCPJsonRpc::buildErrorResponse(writer, req.id, protoErrCode, protoErrMsg);
+        return false;
+    }
+
+    MCPResult res;
+    if (tool->fluentHandler) {
+        tool->fluentHandler(res);
+    } else if (tool->handler) {
+        res = tool->handler(args);
+    }
 
     writer.startObject();
     writer.addString("jsonrpc", "2.0");

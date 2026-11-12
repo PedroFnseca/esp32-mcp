@@ -14,7 +14,7 @@ MCPServer::MCPServer(const char* name, const char* version)
       _hasBearer(false), _authWarned(false), _useBackgroundTask(true),
       _allowedPinCount(0), _gpioReadPin(0), _gpioWritePin(0), _gpioWriteVal(0) {
     setName(name ? name : "ESP32-MCP");
-    setVersion(version ? version : "0.0.1");
+    setVersion(version ? version : "1.0.0");
     setProtocolVersion("2026-07-28");
     _instructions[0] = '\0';
     _requestBuffer[0] = '\0';

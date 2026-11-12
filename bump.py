@@ -52,7 +52,7 @@ def update_mcp_server_header(file_path, new_version):
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
     updated = re.sub(
-        r'(MCPServer\(const String& name = "[^"]*", const String& version = ")[^"]*("\);)',
+        r'(MCPServer\([^)]*version = ")[^"]*("\);)',
         rf'\g<1>{new_version}\g<2>',
         content
     )

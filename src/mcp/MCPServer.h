@@ -37,8 +37,8 @@ private:
     int _gpioWriteVal;
 
 public:
-    MCPServer(const char* name = "ESP32-MCP", const char* version = "0.0.1");
-    MCPServer(const String& name, const String& version = "0.0.1");
+    MCPServer(const char* name = "ESP32-MCP", const char* version = "1.0.0");
+    MCPServer(const String& name, const String& version = "1.0.0");
     ~MCPServer();
 
     void bearer(const char* token);

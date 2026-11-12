@@ -1,267 +1,312 @@
 # ESP32-MCP
 
+[![Automated Tests & Verification](https://github.com/pedro-pedrosa/esp32-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/pedro-pedrosa/esp32-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI Tests](https://github.com/PedroFnseca/esp32-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/PedroFnseca/esp32-mcp/actions/workflows/ci.yml)
-[![Release Please](https://github.com/PedroFnseca/esp32-mcp/actions/workflows/release-please.yml/badge.svg)](https://github.com/PedroFnseca/esp32-mcp/actions/workflows/release-please.yml)
-[![Framework](https://img.shields.io/badge/Framework-Arduino%20%7C%20PlatformIO-blue.svg)](https://platformio.org/)
-[![Target](https://img.shields.io/badge/Target-ESP32-green.svg)](https://espressif.com/)
+[![Release](https://img.shields.io/github/v/release/pedro-pedrosa/esp32-mcp)](https://github.com/pedro-pedrosa/esp32-mcp/releases)
+[![PlatformIO Registry](https://badges.registry.platformio.org/packages/pedro-pedrosa/library/ESP32-MCP.svg)](https://registry.platformio.org/libraries/pedro-pedrosa/ESP32-MCP)
 
-**ESP32-MCP** is an open-source, lightweight, and modular C++ library implementing a **Model Context Protocol (MCP) Server** for ESP32 microcontrollers.
-
-It allows AI assistants (such as Claude Desktop, Gemini, Cursor, and autonomous AI agents) to discover and execute hardware functions, control actuators, read sensor telemetry, and trigger embedded workflows on an ESP32 over standard JSON-RPC.
+**ESP32-MCP** is a lightweight, zero-dependency C++ library that turns an ESP32 into a high-performance Model Context Protocol (MCP) server over HTTP with a fluent declarative tool API, direct variable binding, and zero dynamic memory allocations in the request path.
 
 ---
 
-## Features
+## 1. Quick Start in 30 Seconds
 
-- **Standard MCP 2026-07-28 Protocol**: Full support for the stateless protocol specification including `server/discover`, `initialize`, `ping`, `notifications/initialized`, `tools/list`, and `tools/call`.
-- **JSON-RPC 2.0 Compliance**: Proper handling of IDs, request verification, method routing, and standard JSON-RPC error codes.
-- **Embedded-First Design**: Zero third-party dependencies, DOM-less streaming JSON scanner and fixed-buffer response writer.
-- **Clean & Intuitive API**: Simple lambda-based tool registration with optional JSON Schema parameter definitions.
-- **Decoupled Architecture**: Protocol engine is fully separated from network transports.
-- **Built-in HTTP Transport**: Ready-to-use HTTP server with CORS support.
-- **Host Unit Tested**: Pure protocol and JSON-RPC layers can be validated on host machines without hardware in the loop.
-
----
-
-## Architecture
-
-```
-ESP32-MCP Architecture
-┌─────────────────────────────────────────────────────────────┐
-│                     User Application                        │
-│         (Registers Tools, Controls GPIO, Reads ADC)         │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        MCPServer                            │
-│           (Server Configuration & Tool Registry)            │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    MCP Protocol Engine                      │
-│     (initialize, ping, tools/list, tools/call dispatch)     │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     JSON-RPC 2.0 Layer                      │
-│        (Request Parsing, Validation & Serialization)        │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Transport Layer                        │
-│            MCPHttpTransport (Default: POST /mcp)            │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Installation
-
-### PlatformIO
-Add `ESP32-MCP` to your `platformio.ini`:
-
-```ini
-[env:esp32dev]
-platform = espressif32
-board = esp32dev
-framework = arduino
-monitor_speed = 115200
-lib_deps =
-    https://github.com/PedroFnseca/esp32-mcp.git
-```
-
-### Arduino IDE
-1. Download this repository as a `.zip` archive.
-2. In Arduino IDE, navigate to **Sketch** -> **Include Library** -> **Add .ZIP Library...**
-3. No third-party dependencies required.
-
----
-
-## Quick Start
+No external libraries or JSON parsers required. Just plug into PlatformIO or Arduino IDE:
 
 ```cpp
 #include <WiFi.h>
 #include <ESP32MCP.h>
 
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
-
 MCPServer server("ESP32-Node", "1.0.0");
+static bool ledState = false;
 
 void setup() {
     Serial.begin(115200);
+    WiFi.begin("YOUR_SSID", "YOUR_PASSWORD");
+    while (WiFi.status() != WL_CONNECTED) delay(500);
 
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
+    pinMode(LED_BUILTIN, OUTPUT);
 
-    // Register a tool without parameters
-    server.tool(
-        "get_uptime",
-        "Returns the system uptime in seconds",
-        [](const MCPArguments& args) {
-            uint32_t uptimeSec = millis() / 1000;
-            return MCPResult::text(String(uptimeSec) + "s");
-        }
-    );
+    // Fluent declarative tool with direct variable binding
+    server.tool("set_led", "Turns onboard LED ON or OFF")
+          .destructive()
+          .param("state", &ledState, "true for ON, false for OFF")
+          .handle([](MCPResult& r) {
+              digitalWrite(LED_BUILTIN, ledState ? HIGH : LOW);
+              r.text("LED is now %s", ledState ? "ON" : "OFF");
+          });
 
-    // Register a tool with JSON Schema parameters
-    server.tool(
-        "set_led",
-        "Turns the onboard LED ON or OFF",
-        "{\"type\":\"object\",\"properties\":{\"state\":{\"type\":\"boolean\",\"description\":\"true for ON, false for OFF\"}},\"required\":[\"state\"]}",
-        [](const MCPArguments& args) {
-            if (!args.has("state")) {
-                return MCPResult::error("MISSING_PARAM", "Parameter 'state' is required");
-            }
-            bool state = args.getBool("state");
-            digitalWrite(2, state ? HIGH : LOW);
-            return MCPResult::text(state ? "LED turned ON" : "LED turned OFF");
-        }
-    );
-
-    // Start MCP Server on HTTP port 80 at endpoint /mcp
-    server.begin();
+    server.begin(); // Starts HTTP server & background FreeRTOS task
 }
 
 void loop() {
-    server.handleClient();
+    // loop() remains completely free for your application!
+    delay(1000);
 }
 ```
 
 ---
 
-## API Reference
+## 2. Connecting an MCP Client
 
-### `MCPServer`
-- `MCPServer(const String& name = "ESP32-MCP", const String& version = "0.1.0")`: Creates server instance.
-- `bool tool(const String& name, const String& description, MCPToolHandler handler)`: Registers tool without schema.
-- `bool tool(const String& name, const String& description, const String& schemaJson, MCPToolHandler handler)`: Registers tool with custom JSON Schema.
-- `void setInstructions(const String& instructions)`: Sets system instructions returned during initialization.
-- `bool begin(MCPTransport* transport = nullptr)`: Initializes the transport (defaults to `MCPHttpTransport(80, "/mcp")`).
-- `void handleClient()`: Processes pending client connections in `loop()`.
-- `String processMessage(const String& message)`: Low-level JSON-RPC message processor.
+### Claude Desktop
+In your `claude_desktop_config.json`:
 
-### `MCPArguments`
-Provides type-safe extraction of tool arguments:
-- `bool has(const String& key)`: Checks if a key was supplied.
-- `String getString(const String& key, const String& defaultVal = "")`
-- `int getInt(const String& key, int defaultVal = 0)`
-- `long getLong(const String& key, long defaultVal = 0)`
-- `float getFloat(const String& key, float defaultVal = 0.0f)`
-- `double getDouble(const String& key, double defaultVal = 0.0)`
-- `bool getBool(const String& key, bool defaultVal = false)`
-- `JsonObjectConst getObject(const String& key)`
-- `JsonArrayConst getArray(const String& key)`
-
-### `MCPResult`
-Response builder returned by tool handlers:
-- `MCPResult::text(const String& text)`: Standard text response.
-- `MCPResult::json(const String& jsonString)`: Formatted JSON response.
-- `MCPResult::error(const String& message)`: Tool execution failure.
-- `MCPResult::error(const String& code, const String& message)`: Tool execution failure with error code.
-
----
-
-## Protocol Testing via HTTP
-
-You can test your running ESP32 directly using `curl` or any HTTP client:
-
-### 1. Server Discovery (`server/discover` - MCP 2026-07-28)
-```bash
-curl -X POST http://<ESP32_IP>/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{}}'
-```
-
-**Response:**
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "supportedVersions": ["2026-07-28"],
-    "capabilities": { "tools": { "listChanged": false } },
-    "_meta": {
-      "io.modelcontextprotocol/serverInfo": { "name": "ESP32-Node", "version": "1.0.0" }
-    },
-    "serverInfo": { "name": "ESP32-Node", "version": "1.0.0" }
+  "mcpServers": {
+    "esp32": {
+      "url": "http://192.168.1.150/mcp"
+    }
   }
 }
 ```
+*Tip: If using mDNS, you can reach the device via `http://esp32-node.local/mcp`.*
 
-### 2. Initialize Handshake
-```bash
-curl -X POST http://<ESP32_IP>/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}'
+### Cursor & Other HTTP Clients
+Point your MCP client configuration directly to:
+```text
+http://<ESP32_IP_OR_MDNS>/mcp
+```
+If bearer authentication is enabled, pass the Authorization header:
+```text
+Authorization: Bearer <YOUR_TOKEN>
 ```
 
-### 3. Discover Tools (`tools/list`)
-```bash
-curl -X POST http://<ESP32_IP>/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/list"}'
-```
+### TLS & Reverse Proxy (Production / Public Networks)
+The ESP32 serves plaintext HTTP over local WiFi. When connecting from remote clients or across public networks, place the ESP32 behind a lightweight reverse proxy (such as Caddy or Nginx) to terminate TLS/HTTPS.
 
-### 4. Call a Tool (`tools/call`)
-```bash
-curl -X POST http://<ESP32_IP>/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"set_led","arguments":{"state":true}}}'
-```
-
-**Response:**
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 3,
-  "result": {
-    "content": [
-      { "type": "text", "text": "LED turned ON" }
-    ],
-    "isError": false
-  }
+**Example `Caddyfile` (~10 lines):**
+```caddy
+mcp.example.com {
+    reverse_proxy 192.168.1.150:80 {
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote_host}
+    }
 }
 ```
 
 ---
 
-## Running Unit Tests
+## 3. Defining Tools
 
-The library includes automated unit tests that validate JSON-RPC formatting, error handling, argument extraction, tool registration, and protocol handshakes on host machines without requiring physical hardware:
+### Fluent Declarative API with Variable Binding
+Define inputs, validate ranges, and bind directly to variables without manually parsing JSON or writing schemas:
 
-```bash
-g++ -std=c++14 -Isrc -Itest/mock src/mcp/json/MCPJsonScanner.cpp src/mcp/json/MCPJsonWriter.cpp src/mcp/MCPToolRegistry.cpp src/mcp/MCPJsonRpc.cpp src/mcp/MCPServer.cpp src/mcp/transports/MCPHttpTransport.cpp test/test_main.cpp -o test/test_runner
-./test/test_runner
+```cpp
+static bool state = false;
+static int brightness = 255;
+static char mode[32] = "auto";
+
+server.tool("configure_light", "Controls lighting state and brightness")
+      .destructive()
+      .title("Smart Light Controller")
+      .param("state", &state, "Power state: true or false")
+      .param("brightness", &brightness, 0, 255)          // Validated min / max
+      .param("mode", mode, sizeof(mode), "Operating mode") // String with buffer limit
+      .handle([](MCPResult& r) {
+          // Variables are already validated and populated!
+          r.text("Light set to %s (%d) in mode %s", state ? "ON" : "OFF", brightness, mode);
+      });
+```
+
+#### Supported Parameter Types
+- `bool*`
+- `int*`, `long*` (with optional `min`, `max` validation)
+- `float*`, `double*` (with optional `min`, `max` validation)
+- `char*`, `size_t capacity` (zero-copy string slicing)
+- `.optional()`: makes the parameter optional (missing keys keep existing variable values).
+
+#### Tool Annotations
+Declare tool behavior for LLMs following the MCP specification:
+- `.readOnly()`: Tool has no side-effects (`readOnly: true`).
+- `.destructive()`: Tool alters hardware state (`destructive: true`).
+- `.idempotent()`: Tool produces the same effect if called repeatedly (`idempotent: true`).
+- `.title("...")`: Human-readable title for UI presentation.
+
+#### MCPResult Responses
+- `r.text(fmt, ...)`: Printf-style formatted text without dynamic heap allocation.
+- `r.json(jsonString)`: Structured JSON response.
+- `r.error(msg)`: Tool execution error (`isError: true`).
+- `r.error(code, msg)`: Tool execution error with custom machine-readable code.
+
+### Built-in Diagnostic Tools
+Enable instant hardware inspection with a single call:
+
+```cpp
+// Exposes 'get_status' tool (heap, uptime, WiFi RSSI, chip model, firmware version)
+server.enableStatus();
+
+// Exposes 'read_pin' and 'write_pin' restricted STRICTLY to allowed GPIOs
+server.enableGpio({2, 4, 15});
+```
+
+### Advanced Raw Schema Escape Hatch
+If you need custom complex schemas, pass the JSON Schema string directly with zero copying:
+
+```cpp
+const char* customSchema = "{\"type\":\"object\",\"properties\":{\"raw\":{\"type\":\"string\"}}}";
+
+server.tool("advanced_tool", "Custom raw schema", customSchema, [](const MCPArguments& args) {
+    char rawBuf[64];
+    args.getString("raw", rawBuf, sizeof(rawBuf));
+    return MCPResult::makeText("Echo: %s", rawBuf);
+});
 ```
 
 ---
 
-## Examples
+## 4. Configuration & Memory Limits
 
-Check the `examples/` directory for ready-to-flash projects:
-- **`01_BasicServer`**: Uptime and free heap reporting.
-- **`02_LedControl`**: Digital GPIO actuation with parameter schema.
-- **`03_SensorReading`**: Analog sensor ADC conversion and pin validation.
-- **`04_StructuredData`**: Comprehensive JSON system telemetry reporting.
+ESP32-MCP uses fixed static buffers to guarantee deterministic memory usage. Configure buffer sizes via build flags or header defines:
+
+| Macro | Default | Description & RAM Impact |
+| :--- | :--- | :--- |
+| `MCP_MAX_REQUEST_SIZE` | `4096` bytes | Maximum allowed HTTP request body. Larger payloads return HTTP 413. |
+| `MCP_MAX_RESPONSE_SIZE` | `4096` bytes | Maximum JSON-RPC response buffer. Overflows return protocol error `-32603`. |
+| `MCP_MAX_TOOLS` | `16` | Maximum registered tools in fixed-size registry array (~12 KB RAM). |
+| `MCP_MAX_PARAMS` | `16` | Maximum parameters per fluent tool. |
+| `MCP_MAX_JSON_DEPTH` | `16` | Maximum JSON parser nesting depth (guards against recursion stack overflow). |
+
+### Cache TTL
+Set cache expiration hint for tools and server capabilities:
+```cpp
+server.setCacheTtl(120000); // 2 minutes in milliseconds
+```
+
+### FreeRTOS Background Task
+By default, `server.begin()` automatically spawns a dedicated FreeRTOS task on Core 1 (Stack: 4096 bytes, Priority: 1). This ensures requests are processed asynchronously without blocking user logic in `loop()`.
+
+To manage request polling manually instead:
+```cpp
+server.setUseBackgroundTask(false);
+server.begin();
+
+void loop() {
+    server.handleClient(); // Manual dispatch
+}
+```
 
 ---
 
-## Contributing
+## 5. Security
 
-Contributions are welcome! Please check our [Contributing Guide](CONTRIBUTING.md) for details on our commit conventions (Conventional Commits for Release Please), clean code rules, and testing workflow.
+### Bearer Token Authentication
+Protect your hardware from unauthorized invocations using constant-time verified tokens:
+
+```cpp
+server.bearer("my-super-secret-token");
+```
+- Unauthorized requests receive `HTTP 401 Unauthorized` with JSON-RPC `-32600`.
+- Comparison uses constant-time XOR to prevent timing side-channel attacks.
+- If no token is set, a serial warning is logged on startup:
+  `[ESP32-MCP] WARNING: Server running with NO authentication (bearer token not set). Accessible to anyone on the network!`
+
+### Strict CORS (Closed by Default)
+Browser-based LLM clients running across web origins are blocked by default:
+```cpp
+// Allow only your trusted frontend origin
+server.allowOrigin("https://dashboard.example.com");
+```
+- Requests from untrusted origins or CORS preflight OPTIONS from unknown origins receive `HTTP 403 Forbidden`.
+
+> [!WARNING]
+> Never expose an unauthenticated ESP32 server to public or shared networks without a bearer token and a TLS reverse proxy.
 
 ---
 
-## License
+## 6. Protocol & Compatibility
 
-This library is licensed under the [MIT License](LICENSE).
+- **Native Version (`2026-07-28`)**: Stateless MCP protocol.
+  - Mandatory `server/discover` endpoint.
+  - HTTP headers validation: `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`. Mismatches between headers and body return `HTTP 400 Bad Request`.
+  - Cache TTL hints (`ttlMs`) included in discover and tool listing.
+  - Deterministic tool ordering in `tools/list`.
+  - `id` preservation (numbers and strings echoed verbatim).
+- **Legacy Compatibility (`2024-11-05`)**:
+  - Automatically negotiates and supports legacy clients sending `initialize`, `notifications/initialized`, and `ping`.
+
+---
+
+## 7. Performance & Memory Footprint
+
+### Memory Benchmark (Zero Heap Leaks)
+Tested with `examples/06_PerformanceTest/06_PerformanceTest.ino` running 10,000 consecutive JSON-RPC calls on ESP32:
+
+```text
+--- Heap Stability Benchmark (10,000 requests) ---
+Free heap before: 295,000 bytes
+Free heap after:  295,000 bytes
+Heap delta:       0 bytes (0 bytes leaked!)
+--- Benchmark Complete ---
+```
+
+### Build Footprint (Minimal Build)
+- **RAM**: ~100 KB total used (including FreeRTOS, WiFi stack, and WebServer; library data footprint is < 8 KB statically allocated).
+- **Flash**: ~824 KB (62.9% on standard 4MB ESP32 module, including full WiFi and networking stack).
+- **Zero Allocations**: Zero calls to `malloc` / `new` / `free` during request parsing, dispatch, or response generation.
+
+---
+
+## 8. Testing with cURL
+
+### 1. Discover Capabilities (`server/discover`)
+```bash
+curl -X POST http://esp32-node.local/mcp \
+  -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: server/discover" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover"}'
+```
+
+### 2. List Tools (`tools/list`)
+```bash
+curl -X POST http://esp32-node.local/mcp \
+  -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/list" \
+  -d '{"jsonrpc":"2.0","id":"req-01","method":"tools/list"}'
+```
+
+### 3. Call Tool (`tools/call`) with Bearer Auth
+```bash
+curl -X POST http://esp32-node.local/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer my-super-secret-token" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: set_led" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"set_led","arguments":{"state":true}}}'
+```
+
+---
+
+## 9. Migration from v0.1.0
+
+| Feature | v0.1.0 (Old) | v0.2.0 (New) |
+| :--- | :--- | :--- |
+| **Dependencies** | Requires `ArduinoJson` v7 | **Zero dependencies** (internal zero-alloc scanner & writer) |
+| **Hot Path Strings** | Heavy `String` allocations & copies | `const char*` + size, fixed buffers, `snprintf` |
+| **Tool Declaration** | Manual JSON schema string + manual `args.has()` | Fluent `.param(&var)` with auto-generated schema |
+| **Validation** | Manual checks inside handlers | Automatic type and range validation (error `-32602`) |
+| **Dispatch Model** | Blocking in `loop()` via `server.handleClient()` | Automatic FreeRTOS background task (Core 1) |
+| **Protocol** | `2024-11-05` (stateful handshake) | `2026-07-28` (stateless + discovery + legacy fallback) |
+| **Security** | Open CORS (`*`), no authentication | Bearer auth + constant-time check + closed CORS |
+| **Payload Guard** | Unbounded | HTTP 413 on request overflow |
+
+---
+
+## 10. Contributing & License
+
+### Running Tests Locally
+Tests use PlatformIO native environment with Unity:
+
+```bash
+# Run unit test suite on native host
+pio test -e native
+```
+
+All contributions must follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`) to support automated releases via Release Please.
+
+### License
+Released under the [MIT License](LICENSE).

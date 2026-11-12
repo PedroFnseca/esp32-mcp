@@ -22,11 +22,15 @@ private:
 
     char _requestBuffer[MCP_MAX_REQUEST_SIZE];
     char _responseBuffer[MCP_MAX_RESPONSE_SIZE];
+    uint32_t _cacheTtlMs;
 
 public:
     MCPServer(const char* name = "ESP32-MCP", const char* version = "0.0.1");
     MCPServer(const String& name, const String& version = "0.0.1");
     ~MCPServer();
+
+    void setCacheTtl(uint32_t ms);
+    uint32_t getCacheTtl() const;
 
     void setName(const char* name);
     void setName(const String& name);
@@ -66,6 +70,8 @@ public:
     size_t getRequestBufferSize() const { return sizeof(_requestBuffer); }
     char* getResponseBuffer() { return _responseBuffer; }
     size_t getResponseBufferSize() const { return sizeof(_responseBuffer); }
+
+    bool validateHeaders(const char* protocolVersionHdr, const char* methodHdr, const char* nameHdr, const MCPRpcRequestView& req, char* errOut, size_t errCap);
 
     bool handleServerDiscover(const MCPRpcRequestView& req, MCPJsonWriter& writer);
     bool handleInitialize(const MCPRpcRequestView& req, MCPJsonWriter& writer);

@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 MCPServer::MCPServer(const char* name, const char* version)
-    : _transport(nullptr), _ownsTransport(false) {
+    : _transport(nullptr), _ownsTransport(false), _cacheTtlMs(60000) {
     setName(name ? name : "ESP32-MCP");
     setVersion(version ? version : "0.0.1");
     setProtocolVersion("2026-07-28");
@@ -23,6 +23,14 @@ MCPServer::~MCPServer() {
         delete _transport;
         _transport = nullptr;
     }
+}
+
+void MCPServer::setCacheTtl(uint32_t ms) {
+    _cacheTtlMs = ms;
+}
+
+uint32_t MCPServer::getCacheTtl() const {
+    return _cacheTtlMs;
 }
 
 void MCPServer::setName(const char* name) {
@@ -149,6 +157,35 @@ String MCPServer::processMessage(const String& message) {
     return String(_responseBuffer);
 }
 
+bool MCPServer::validateHeaders(const char* protocolVersionHdr, const char* methodHdr, const char* nameHdr, const MCPRpcRequestView& req, char* errOut, size_t errCap) {
+    if (protocolVersionHdr && protocolVersionHdr[0] != '\0') {
+        if (strcmp(protocolVersionHdr, "2026-07-28") != 0 && strcmp(protocolVersionHdr, "2024-11-05") != 0) {
+            snprintf(errOut, errCap, "Unsupported MCP-Protocol-Version: %s", protocolVersionHdr);
+            return false;
+        }
+    }
+
+    if (methodHdr && methodHdr[0] != '\0') {
+        char bodyMethod[64] = {0};
+        req.method.decodeString(bodyMethod, sizeof(bodyMethod));
+        if (strcmp(methodHdr, bodyMethod) != 0) {
+            snprintf(errOut, errCap, "Mcp-Method header '%s' does not match body method '%s'", methodHdr, bodyMethod);
+            return false;
+        }
+    }
+
+    if (nameHdr && nameHdr[0] != '\0') {
+        char bodyName[64] = {0};
+        req.paramsName.decodeString(bodyName, sizeof(bodyName));
+        if (strcmp(nameHdr, bodyName) != 0) {
+            snprintf(errOut, errCap, "Mcp-Name header '%s' does not match tool name '%s'", nameHdr, bodyName);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool MCPServer::handleServerDiscover(const MCPRpcRequestView& req, MCPJsonWriter& writer) {
     writer.startObject();
     writer.addString("jsonrpc", "2.0");
@@ -162,7 +199,8 @@ bool MCPServer::handleServerDiscover(const MCPRpcRequestView& req, MCPJsonWriter
 
     writer.writeKey("supportedVersions");
     writer.startArray();
-    writer.writeString(_protocolVersion);
+    writer.writeString("2026-07-28");
+    writer.writeString("2024-11-05");
     writer.endArray();
 
     writer.writeKey("capabilities");
@@ -184,6 +222,7 @@ bool MCPServer::handleServerDiscover(const MCPRpcRequestView& req, MCPJsonWriter
     writer.addString("name", _name);
     writer.addString("version", _version);
     writer.endObject();
+    writer.addLong("ttlMs", (long)_cacheTtlMs);
     writer.endObject();
 
     writer.writeKey("serverInfo");
@@ -208,7 +247,17 @@ bool MCPServer::handleInitialize(const MCPRpcRequestView& req, MCPJsonWriter& wr
     writer.writeKey("result");
     writer.startObject();
 
-    writer.addString("protocolVersion", _protocolVersion);
+    const char* respVersion = _protocolVersion;
+    if (req.params.isValid() && req.params.isObject()) {
+        MCPJsonSlice clientVerSlice = MCPJsonScanner::findKey(req.params.ptr, req.params.len, "protocolVersion");
+        if (clientVerSlice.isValid() && clientVerSlice.isString()) {
+            if (clientVerSlice.equalsString("2024-11-05")) {
+                respVersion = "2024-11-05";
+            }
+        }
+    }
+
+    writer.addString("protocolVersion", respVersion);
 
     writer.writeKey("capabilities");
     writer.startObject();
@@ -286,6 +335,11 @@ bool MCPServer::handleToolsList(const MCPRpcRequestView& req, MCPJsonWriter& wri
         writer.endObject();
     }
     writer.endArray();
+
+    writer.writeKey("_meta");
+    writer.startObject();
+    writer.addLong("ttlMs", (long)_cacheTtlMs);
+    writer.endObject();
 
     writer.endObject();
     writer.endObject();

@@ -67,7 +67,7 @@ void test_mcp_server_discover() {
     String response = server.processMessage(req);
 
     TEST_ASSERT(response.indexOf("\"id\":\"disc-1\"") != -1, "ID must match disc-1");
-    TEST_ASSERT(response.indexOf("\"supportedVersions\":[\"2026-07-28\"]") != -1, "Supported version must be 2026-07-28");
+    TEST_ASSERT(response.indexOf("\"supportedVersions\":[\"2026-07-28\",\"2024-11-05\"]") != -1, "Supported versions must match");
     TEST_ASSERT(response.indexOf("\"listChanged\":false") != -1, "Capabilities tools mismatch");
     TEST_ASSERT(response.indexOf("\"instructions\":\"Autonomous IoT Node\"") != -1, "Instructions mismatch");
     TEST_ASSERT(response.indexOf("\"name\":\"ESP32-DiscoverNode\"") != -1, "ServerInfo name mismatch");
@@ -443,6 +443,46 @@ void test_fluent_tool_builder_and_validation() {
     TEST_ASSERT(strcmp(mode, "blink") == 0, "Target variable mode must be updated to blink");
 }
 
+void test_step4_protocol_and_headers() {
+    MCPServer server("Node-2026", "2.0.0");
+    server.setCacheTtl(120000);
+
+    // 1. Discover full check with ttlMs
+    String discReq = "{\"jsonrpc\":\"2.0\",\"id\":\"disc-42\",\"method\":\"server/discover\",\"params\":{}}";
+    String discResp = server.processMessage(discReq);
+    TEST_ASSERT(discResp.indexOf("\"supportedVersions\":[\"2026-07-28\",\"2024-11-05\"]") != -1, "Must list all supported versions");
+    TEST_ASSERT(discResp.indexOf("\"ttlMs\":120000") != -1, "Must include configured ttlMs in _meta");
+
+    // 2. Legacy initialize negotiation (client requests 2024-11-05)
+    String legInitReq = "{\"jsonrpc\":\"2.0\",\"id\":100,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\"}}";
+    String legInitResp = server.processMessage(legInitReq);
+    TEST_ASSERT(legInitResp.indexOf("\"protocolVersion\":\"2024-11-05\"") != -1, "Must negotiate 2024-11-05 when requested");
+
+    // 3. Header validation
+    const char* rawReq = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"set_led\",\"arguments\":{}}}";
+    MCPRpcRequestView view;
+    MCPScanError err = MCPScanError::None;
+    bool parseOk = MCPJsonScanner::parseRpcRequest(rawReq, strlen(rawReq), view, &err);
+    TEST_ASSERT(parseOk, "Parse must succeed");
+
+    char errBuf[128];
+    // Matching headers
+    bool hOk1 = server.validateHeaders("2026-07-28", "tools/call", "set_led", view, errBuf, sizeof(errBuf));
+    TEST_ASSERT(hOk1, "Matching headers must pass validation");
+
+    // Unsupported version
+    bool hOk2 = server.validateHeaders("1999-01-01", "tools/call", "set_led", view, errBuf, sizeof(errBuf));
+    TEST_ASSERT(!hOk2, "Unsupported version header must fail");
+
+    // Method mismatch
+    bool hOk3 = server.validateHeaders("2026-07-28", "tools/list", "set_led", view, errBuf, sizeof(errBuf));
+    TEST_ASSERT(!hOk3, "Mismatched method header must fail");
+
+    // Name mismatch
+    bool hOk4 = server.validateHeaders("2026-07-28", "tools/call", "wrong_name", view, errBuf, sizeof(errBuf));
+    TEST_ASSERT(!hOk4, "Mismatched name header must fail");
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << " Running ESP32-MCP Unit Test Suite      " << std::endl;
@@ -479,6 +519,7 @@ int main() {
     RUN_TEST(test_arguments_get_raw);
     RUN_TEST(test_response_buffer_overflow_error);
     RUN_TEST(test_fluent_tool_builder_and_validation);
+    RUN_TEST(test_step4_protocol_and_headers);
 
     std::cout << "========================================" << std::endl;
     std::cout << " Test Summary: " << tests_passed << " passed, " << tests_failed << " failed" << std::endl;

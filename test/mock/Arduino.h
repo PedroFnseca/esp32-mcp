@@ -144,4 +144,13 @@ public:
 };
 static MockESP ESP;
 
+class MockSerial {
+public:
+    void print(const char* s) { std::cout << (s ? s : ""); }
+    void println(const char* s) { std::cout << (s ? s : "") << "\n"; }
+    void print(int val) { std::cout << val; }
+    void println(int val) { std::cout << val << "\n"; }
+};
+static MockSerial Serial;
+
 #endif

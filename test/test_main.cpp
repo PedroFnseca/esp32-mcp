@@ -483,6 +483,24 @@ void test_step4_protocol_and_headers() {
     TEST_ASSERT(!hOk4, "Mismatched name header must fail");
 }
 
+void test_security_bearer_and_cors() {
+    MCPServer server;
+    // Without bearer configured: any request passes checkBearer
+    TEST_ASSERT(server.checkBearer(nullptr), "Without bearer configured, checkBearer must be true");
+
+    server.bearer("my-secret-token-123");
+    TEST_ASSERT(!server.checkBearer(nullptr), "Missing header must fail when bearer is set");
+    TEST_ASSERT(!server.checkBearer("Basic dXNlcjpwYXNz"), "Non-bearer auth must fail");
+    TEST_ASSERT(!server.checkBearer("Bearer wrong-token"), "Wrong bearer token must fail");
+    TEST_ASSERT(server.checkBearer("Bearer my-secret-token-123"), "Correct bearer token must pass");
+
+    // CORS closed by default
+    TEST_ASSERT(!server.checkOrigin("https://example.com"), "CORS must be closed by default");
+    server.allowOrigin("https://trusted.ai");
+    TEST_ASSERT(!server.checkOrigin("https://malicious.com"), "Untrusted origin must be rejected");
+    TEST_ASSERT(server.checkOrigin("https://trusted.ai"), "Configured allowed origin must be accepted");
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << " Running ESP32-MCP Unit Test Suite      " << std::endl;
@@ -520,6 +538,7 @@ int main() {
     RUN_TEST(test_response_buffer_overflow_error);
     RUN_TEST(test_fluent_tool_builder_and_validation);
     RUN_TEST(test_step4_protocol_and_headers);
+    RUN_TEST(test_security_bearer_and_cors);
 
     std::cout << "========================================" << std::endl;
     std::cout << " Test Summary: " << tests_passed << " passed, " << tests_failed << " failed" << std::endl;

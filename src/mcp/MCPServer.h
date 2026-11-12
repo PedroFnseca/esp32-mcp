@@ -24,10 +24,32 @@ private:
     char _responseBuffer[MCP_MAX_RESPONSE_SIZE];
     uint32_t _cacheTtlMs;
 
+    char _bearerToken[64];
+    bool _hasBearer;
+    char _allowedOrigin[128];
+    bool _authWarned;
+    bool _useBackgroundTask;
+
 public:
     MCPServer(const char* name = "ESP32-MCP", const char* version = "0.0.1");
     MCPServer(const String& name, const String& version = "0.0.1");
     ~MCPServer();
+
+    void bearer(const char* token);
+    void bearer(const String& token);
+    bool hasBearer() const { return _hasBearer; }
+    const char* getBearer() const { return _bearerToken; }
+
+    void allowOrigin(const char* origin);
+    void allowOrigin(const String& origin);
+    const char* getAllowedOrigin() const { return _allowedOrigin; }
+
+    bool checkBearer(const char* authHeader);
+    bool checkOrigin(const char* originHeader);
+    void checkAndWarnAuth();
+
+    void setUseBackgroundTask(bool enable) { _useBackgroundTask = enable; }
+    bool getUseBackgroundTask() const { return _useBackgroundTask; }
 
     void setCacheTtl(uint32_t ms);
     uint32_t getCacheTtl() const;

@@ -5,13 +5,76 @@
 #include <stdio.h>
 
 MCPServer::MCPServer(const char* name, const char* version)
-    : _transport(nullptr), _ownsTransport(false), _cacheTtlMs(60000) {
+    : _transport(nullptr), _ownsTransport(false), _cacheTtlMs(60000),
+      _hasBearer(false), _authWarned(false), _useBackgroundTask(true) {
     setName(name ? name : "ESP32-MCP");
     setVersion(version ? version : "0.0.1");
     setProtocolVersion("2026-07-28");
     _instructions[0] = '\0';
     _requestBuffer[0] = '\0';
     _responseBuffer[0] = '\0';
+    _bearerToken[0] = '\0';
+    _allowedOrigin[0] = '\0';
+}
+
+void MCPServer::bearer(const char* token) {
+    if (token && token[0] != '\0') {
+        strncpy(_bearerToken, token, sizeof(_bearerToken) - 1);
+        _bearerToken[sizeof(_bearerToken) - 1] = '\0';
+        _hasBearer = true;
+    } else {
+        _bearerToken[0] = '\0';
+        _hasBearer = false;
+    }
+}
+
+void MCPServer::bearer(const String& token) {
+    bearer(token.c_str());
+}
+
+void MCPServer::allowOrigin(const char* origin) {
+    if (origin && origin[0] != '\0') {
+        strncpy(_allowedOrigin, origin, sizeof(_allowedOrigin) - 1);
+        _allowedOrigin[sizeof(_allowedOrigin) - 1] = '\0';
+    } else {
+        _allowedOrigin[0] = '\0';
+    }
+}
+
+void MCPServer::allowOrigin(const String& origin) {
+    allowOrigin(origin.c_str());
+}
+
+static bool constantTimeCompare(const char* a, const char* b) {
+    if (!a || !b) return false;
+    size_t lenA = strlen(a);
+    size_t lenB = strlen(b);
+    if (lenA != lenB) return false;
+    unsigned char diff = 0;
+    for (size_t i = 0; i < lenA; ++i) {
+        diff |= ((unsigned char)a[i] ^ (unsigned char)b[i]);
+    }
+    return diff == 0;
+}
+
+bool MCPServer::checkBearer(const char* authHeader) {
+    if (!_hasBearer) return true;
+    if (!authHeader) return false;
+    if (strncmp(authHeader, "Bearer ", 7) != 0) return false;
+    return constantTimeCompare(authHeader + 7, _bearerToken);
+}
+
+bool MCPServer::checkOrigin(const char* originHeader) {
+    if (_allowedOrigin[0] == '\0') return false;
+    if (!originHeader) return false;
+    return strcmp(originHeader, _allowedOrigin) == 0;
+}
+
+void MCPServer::checkAndWarnAuth() {
+    if (!_hasBearer && !_authWarned) {
+        _authWarned = true;
+        Serial.println("[ESP32-MCP] WARNING: Server running with NO authentication (bearer token not set). Accessible to anyone on the network!");
+    }
 }
 
 MCPServer::MCPServer(const String& name, const String& version)
@@ -122,6 +185,8 @@ const MCPToolRegistry& MCPServer::getToolRegistry() const {
 }
 
 bool MCPServer::begin(MCPTransport* transport) {
+    checkAndWarnAuth();
+
     if (transport != nullptr) {
         if (_ownsTransport && _transport != nullptr) {
             delete _transport;
@@ -134,7 +199,29 @@ bool MCPServer::begin(MCPTransport* transport) {
     }
     if (_transport != nullptr) {
         _transport->setServer(this);
-        return _transport->begin();
+        bool ok = _transport->begin();
+        if (!ok) return false;
+
+#if defined(ESP32) || defined(ARDUINO_ARCH_ESP32)
+        if (_useBackgroundTask) {
+            xTaskCreatePinnedToCore(
+                [](void* param) {
+                    MCPServer* s = (MCPServer*)param;
+                    for (;;) {
+                        s->handleClient();
+                        vTaskDelay(pdMS_TO_TICKS(5));
+                    }
+                },
+                "mcp_server",
+                4096,
+                this,
+                1,
+                nullptr,
+                1
+            );
+        }
+#endif
+        return true;
     }
     return true;
 }

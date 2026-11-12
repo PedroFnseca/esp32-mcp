@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/PedroFnseca/esp32-mcp/compare/esp32-mcp-v1.1.0...esp32-mcp-v1.1.1) (2026-11-12)
+
+
+### Documentation
+
+* refactor readme apresentation ([deccf8e](https://github.com/PedroFnseca/esp32-mcp/commit/deccf8e36dc8ec2a837e7944e94fcc5a108677a5))
+
 ## [1.1.0](https://github.com/PedroFnseca/esp32-mcp/compare/esp32-mcp-v1.0.0...esp32-mcp-v1.1.0) (2026-11-12)
 
 

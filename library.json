@@ -26,6 +26,7 @@
   "platforms": "espressif32",
   "dependencies": [],
   "headers": [
+    "ESP32-MCP.h",
     "ESP32MCP.h"
   ]
 }
